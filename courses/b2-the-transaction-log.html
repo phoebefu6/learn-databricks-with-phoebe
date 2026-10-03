@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 2 of 8. Open the JSON commits of a real Delta table line by line: the four kinds of action, the statistics inside every add, what a remove leaves behind, and how a checkpoint shortcuts a long log. Then write a short Python replay that rebuilds the live file list at every version and agrees with delta-rs.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Reading the transaction log - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 2 of 8. A Delta table's truth is a replay of JSON actions: newest action per file wins. Rebuild 21,617, 77,033 and 76,103 rows by hand and watch delta-rs agree at every version.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b2-the-transaction-log.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Reading the transaction log - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 2 of 8. Add, remove, checkpoint: read a real Delta log aloud and replay it yourself in Python.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 2 · Reading the transaction log - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 2 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 2 of 8</div>
+    <h1>Reading the <span class="accent">transaction log</span></h1>
+    <p class="sub">Last session you made two JSON files without reading them. Tonight you open them. Every line is one action, and four kinds of action are enough to describe your whole table: what happened, which reader it needs, what the schema is, and which Parquet file joined. Then you delete the voided trips, which adds the fifth kind, a <code>remove</code>, and you write a short Python replay that rebuilds the live file list at every version from nothing but the JSON. delta-rs is the referee. It agrees every time, and by the end you know why.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Analysts and engineers who write Python</span>
+      <span class="chip audience">Laptop path needs no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Actions, replay, checkpoints</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: replay the log yourself</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">You start from the <code>trips_delta</code> folder that session 1 built: 77,033 trips from 15 January 2024, two versions, two Parquet files. Tonight's script, <code>b2.py</code>, runs in the same folder right after <code>b1.py</code>. Every output on this page was produced by running it with deltalake 1.6.6. The rules you will apply by hand come from the Delta protocol itself, PROTOCOL.md in the delta-io repository, which is short enough to read in one sitting and worth it.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = run, outputs pasted</span>
+      <span class="pill">Free Edition path = the same moves, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A short Python replay that rebuilds any version's file list from the raw JSON and agrees with delta-rs at versions 0, 1 and 2, a checkpoint you made yourself, and the ability to read any <code>add</code>, <code>remove</code> or checkpoint line aloud and say what it does to the table.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the four kinds of action</span>
+      <h2>What one commit file holds</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A log entry is a newline-delimited JSON file: one action per line, nothing else. Your version 0 holds four lines and version 1 holds two. Read them in order and you have read the table's whole history, including the statistics that later sessions use to skip files.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 312" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Version 0 of the session 1 table taken apart line by line. Line 1, commitInfo: operation WRITE, engineInfo delta-rs:py-1.6.6. Line 2, protocol: minReaderVersion 3, minWriterVersion 7, feature timestampNtz. Line 3, metaData: the schema and configuration. Line 4, add: path, size, modificationTime, dataChange true, stats. Beside it, the stats of version 1's add: numRecords 55416, pickup_ts from 2024-01-15 12:00:02 to 2024-01-15 23:59:58, fare_amount from -380.0 to 577.0, pu_zone from 1 to 265.">
+        <defs>
+          <filter id="b2aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="31" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b2aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b2aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b2aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b2aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b2aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b2aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b2aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b2aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b2aH" x="40" y="30">00000000000000000000.json · version 0, one action per line</text>
+
+        <g filter="url(#b2aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="50" width="420" height="46" rx="6" transform="rotate(-0.6 250 73)" fill="#FFFFFF"/>
+          <rect x="40" y="110" width="420" height="46" rx="6" transform="rotate(0.6 250 133)" fill="#FFF5F3"/>
+          <rect x="40" y="170" width="420" height="46" rx="6" transform="rotate(-0.5 250 193)" fill="#FFFFFF"/>
+          <rect x="40" y="230" width="420" height="46" rx="6" transform="rotate(0.5 250 253)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="510" y="50" width="340" height="226" rx="10" transform="rotate(0.4 680 163)" fill="#FFF5F3" stroke="#E00F00"/>
+          <path d="M466 253 C486 253 488 226 504 222" marker-end="url(#b2aAr)"/>
+        </g>
+
+        <text class="b2aC" x="56" y="70">1 · commitInfo</text>
+        <text class="b2aS" x="56" y="88">operation WRITE · engineInfo delta-rs:py-1.6.6</text>
+        <text class="b2aC" x="56" y="130">2 · protocol</text>
+        <text class="b2aS" x="56" y="148">minReaderVersion 3 · minWriterVersion 7 · timestampNtz</text>
+        <text class="b2aC" x="56" y="190">3 · metaData</text>
+        <text class="b2aS" x="56" y="208">the schema of the 8 columns, plus configuration</text>
+        <text class="b2aL" x="56" y="250">4 · add</text>
+        <text class="b2aB" x="56" y="268">path · size · modificationTime · dataChange true · stats</text>
+
+        <text class="b2aH" x="526" y="74">version 1's add · its stats</text>
+        <text class="b2aC" x="526" y="100">numRecords 55416</text>
+        <text class="b2aC" x="526" y="124">pickup_ts min 2024-01-15 12:00:02</text>
+        <text class="b2aC" x="526" y="146">pickup_ts max 2024-01-15 23:59:58</text>
+        <text class="b2aC" x="526" y="170">fare_amount min -380.0 · max 577.0</text>
+        <text class="b2aC" x="526" y="194">pu_zone min 1 · max 265</text>
+        <text class="b2aS" x="526" y="222">kept as minValues, maxValues, nullCount</text>
+        <text class="b2aS" x="526" y="246">a negative fare is already visible here</text>
+
+        <text class="b2aN" x="40" y="300">One file, read top to bottom: who wrote it, what reader it needs, the schema, and the data file that joined.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber line is the one that changes what you read; the stats beside it are a per-file summary you never had to compute</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Action types, one per line<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>PROTOCOL.md defines a log entry as a JSON file in <code>_delta_log</code>, named by its version zero-padded to 20 digits, holding newline-delimited actions, one per line. Your table so far uses four: <code>commitInfo</code> records what happened and who did it; <code>protocol</code> says which reader and writer features the table needs; <code>metaData</code> carries the schema and table settings; <code>add</code> brings one data file into the table. Tonight's DELETE adds a fifth, <code>remove</code>. You will meet <code>cdc</code> in session 4.</p>
+        <p>Because each line is a self-contained JSON object, reading a commit is three lines of Python: open the file, <code>json.loads</code> each line, look at the one key. That is the whole of the first build-along step.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Every field of an add<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The protocol lists the fields of <code>add</code>: <code>path</code>, <code>partitionValues</code>, <code>size</code>, <code>modificationTime</code>, <code>dataChange</code>, <code>stats</code>, <code>tags</code>, <code>deletionVector</code>, <code>baseRowId</code>, <code>defaultRowCommitVersion</code> and <code>clusteringProvider</code>. <code>stats</code> is optional, but delta-rs writes it, as a JSON string inside the JSON line, which is why the replay calls <code>json.loads</code> on it a second time.</p>
+        <p>The stats hold <code>numRecords</code> and, per column, <code>minValues</code>, <code>maxValues</code> and <code>nullCount</code>. Read version 1's aloud: 55,416 rows, pickups from 12:00:02 to 23:59:58, fares from -380.0 to 577.0, pickup zones 1 to 265. The protocol says these statistics "can be used for eliminating files based on query predicates", which is session 5's whole subject. Notice the -380.0 already: the voided trips you delete tonight were announced in the log before you looked at a single row.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>When dataChange is false<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Your WRITE and DELETE commits changed which rows the table holds. The protocol allows <code>false</code> for a commit that "only rearranges existing data or adds new statistics". OPTIMIZE uses it: it removes small files and adds a compacted one with the same rows, and marks the commit <code>dataChange: false</code>. You will see one on the bench in session 8.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Thirty-nine file actions, one file, all or nothing.</strong> On the <a href="b8-the-delta-log-bench.html">Delta log bench</a> built for session 8, a DELETE of 113 voided trips from a 31-file table wrote version 32 as a single JSON file holding 30 <code>remove</code> lines, 8 <code>add</code> lines and 1 <code>cdc</code> line. No reader ever saw 30 files removed and 8 not yet added: either the file <code>00000000000000000032.json</code> exists, and all 39 file actions (plus its <code>commitInfo</code>) apply, or it does not, and none do.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers reconciliation</span>
+      <h2>Newest action per file wins</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">A version is not stored anywhere as a list. It is computed: start at version 0, apply every action in ascending order, and keep what is left. The protocol calls this reconciliation. Your DELETE of trips with a fare below zero makes it visible, because for the first time a commit takes files away as well as adding one.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 322" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Replaying three commits. v0 WRITE adds file A: live set A, 1 file, 21,617 rows. v1 WRITE append adds file B: live set A and B, 2 files, 77,033 rows. v2 DELETE fare_amount below 0 removes A and B and adds C: live set C, 1 file, 76,103 rows; A and B become tombstones kept for VACUUM.">
+        <defs>
+          <filter id="b2bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b2bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b2bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b2bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b2bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b2bC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b2bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b2bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b2bV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b2bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b2bH" x="30" y="40">COMMIT · what the JSON says</text>
+        <text class="b2bH" x="360" y="40">LIVE SET AFTER REPLAY</text>
+        <text class="b2bH" x="765" y="40">ROWS</text>
+
+        <g filter="url(#b2bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="56" width="270" height="64" rx="8" transform="rotate(-0.6 165 88)" fill="#FFFFFF"/>
+          <rect x="30" y="140" width="270" height="64" rx="8" transform="rotate(0.6 165 172)" fill="#FFFFFF"/>
+          <rect x="30" y="224" width="270" height="64" rx="8" transform="rotate(-0.5 165 256)" fill="#FFF5F3" stroke="#E00F00"/>
+          <path d="M306 88 L352 88" marker-end="url(#b2bAr)"/>
+          <path d="M306 172 L352 172" marker-end="url(#b2bAr)"/>
+          <path d="M306 256 L352 256" marker-end="url(#b2bAr)"/>
+          <rect x="360" y="68" width="120" height="40" rx="6" transform="rotate(-1.5 420 88)" fill="#FFF5F3"/>
+          <rect x="360" y="152" width="120" height="40" rx="6" transform="rotate(1.2 420 172)" fill="#FFF5F3"/>
+          <rect x="500" y="152" width="120" height="40" rx="6" transform="rotate(-1.4 560 172)" fill="#FFF5F3"/>
+          <rect x="360" y="236" width="120" height="40" rx="6" transform="rotate(1 420 256)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="495" y="236" width="115" height="40" rx="6" transform="rotate(-1.2 552 256)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="620" y="236" width="115" height="40" rx="6" transform="rotate(1.3 677 256)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+        </g>
+
+        <text class="b2bH" x="44" y="78">v0 · WRITE (creates the table)</text>
+        <text class="b2bC" x="44" y="98">add A</text>
+        <text class="b2bS" x="44" y="113">the morning, before noon</text>
+        <text class="b2bH" x="44" y="162">v1 · WRITE (append)</text>
+        <text class="b2bC" x="44" y="182">add B</text>
+        <text class="b2bS" x="44" y="197">the afternoon and evening</text>
+        <text class="b2bH" x="44" y="246">v2 · DELETE fare_amount &lt; 0</text>
+        <text class="b2bC" x="44" y="264">remove A · remove B · add C</text>
+        <text class="b2bS" x="44" y="280">930 rows gone, the rest rewritten into C</text>
+
+        <text class="b2bL" x="374" y="93">A · 21,617</text>
+        <text class="b2bL" x="374" y="177">A · 21,617</text>
+        <text class="b2bL" x="514" y="177">B · 55,416</text>
+        <text class="b2bL" x="374" y="261">C · 76,103</text>
+        <text class="b2bS" x="507" y="253">A · tombstone</text>
+        <text class="b2bS" x="507" y="268">kept for VACUUM</text>
+        <text class="b2bS" x="632" y="253">B · tombstone</text>
+        <text class="b2bS" x="632" y="268">kept for VACUUM</text>
+
+        <text class="b2bV" x="765" y="88">21,617</text>
+        <text class="b2bS" x="765" y="106">1 file</text>
+        <text class="b2bV" x="765" y="172">77,033</text>
+        <text class="b2bS" x="765" y="190">2 files</text>
+        <text class="b2bV" x="765" y="256">76,103</text>
+        <text class="b2bS" x="765" y="274">1 file</text>
+
+        <text class="b2bN" x="30" y="310">A remove after an add takes the file out of the table. The bytes stay on disk until VACUUM, session 3.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three files sit in the folder after v2, but only the amber one is the table; A, B and C are labels for the random file names</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The replay rule, word for word<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>PROTOCOL.md builds a snapshot by replaying actions in ascending version order. The latest <code>protocol</code> wins. The latest <code>metaData</code> wins. For data files, the newest action per logical file wins, where a logical file is identified by its <code>path</code> together with its deletion vector's unique id. If that newest action is an <code>add</code>, the file is present. If it is a <code>remove</code>, the file is a tombstone, which the protocol says exists only for the benefit of the VACUUM command.</p>
+        <p>That is exactly the <code>replay()</code> function in tonight's build-along: a dict keyed by path, <code>add</code> puts a key in, <code>remove</code> pops it out, versions read in sorted order. Order matters because the same path can be added in one version and removed in a later one; read them backwards and A and B would come back to life.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Why a commit is all or nothing<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The protocol says "Delta files are the unit of atomicity for a table". Writers "optimistically write out new data files" first, so file C existed on disk before version 2 did, and then commit by creating the next log entry. "Writers MUST never overwrite an existing log entry", and they create it with an atomic storage primitive. If two writers both try to create <code>00000000000000000002.json</code>, only one can win; the other has to try again at a later version. That is optimistic concurrency: no lock is held while the data files are written.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Deletion vectors, and why you saw none<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Rewriting 76,103 rows to drop 930 is honest but heavy. Deletion vectors are an optional table feature that marks deleted rows without rewriting the data file; that is why the logical file key includes the deletion vector's id. delta-rs 1.6.6 wrote no deletion vectors in this build, so the DELETE rewrote both files into one. To see which features a table on Databricks uses, read <code>tableFeatures</code> in <code>DESCRIBE DETAIL</code>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The folder lister.</strong> An analyst skips the log and points a script at every Parquet file in <code>trips_delta</code>. After tonight's DELETE the folder holds three data files, A, B and C, so the script counts 21,617 + 55,416 + 76,103 = 153,136 rows for a day that has 76,103: every surviving trip twice, and the 930 voided trips back from the dead. Nothing errors. This analyst is constructed; the arithmetic is tonight's real output, and it is the reason the replay, not the folder, defines the table.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers checkpoints</span>
+      <h2>Shortcuts through a long log</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Replaying three JSON files is instant. Replaying years of frequent commits is not. A checkpoint is a Parquet file holding the result of the replay up to some version, and a small file called <code>_last_checkpoint</code> tells readers where the newest one is. With it, a reader loads one Parquet file and then replays only the JSON written after it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 286" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The bench table's log with a checkpoint at version 32. JSON commits 0 to 32 are skipped. A reader opens _last_checkpoint, which says version 32 with 9 add files, loads 00000000000000000032.checkpoint.parquet with the complete replay up to v32, then applies only the JSON from v33 onward to get the snapshot. Your own b2 run wrote _last_checkpoint with version 2, size 5, sizeInBytes 15132, numOfAddFiles 1.">
+        <defs>
+          <filter id="b2cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b2cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b2cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b2cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b2cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b2cC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b2cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b2cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b2cW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b2cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b2cH" x="30" y="30">THE BENCH TABLE'S LOG · a reader with a checkpoint at v32</text>
+
+        <g filter="url(#b2cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="56" width="80" height="44" rx="5" transform="rotate(-1.5 70 78)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="120" y="56" width="80" height="44" rx="5" transform="rotate(1.2 160 78)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="210" y="56" width="80" height="44" rx="5" transform="rotate(-1 250 78)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="300" y="56" width="80" height="44" rx="5" transform="rotate(1.4 340 78)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="390" y="56" width="80" height="44" rx="5" transform="rotate(-1.2 430 78)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="480" y="56" width="80" height="44" rx="5" transform="rotate(1 520 78)" fill="#FFF5F3"/>
+          <rect x="570" y="56" width="80" height="44" rx="5" transform="rotate(-1.3 610 78)" fill="#FFF5F3"/>
+          <rect x="30" y="146" width="240" height="54" rx="8" transform="rotate(-0.8 150 173)" fill="#FFFFFF"/>
+          <rect x="330" y="146" width="230" height="54" rx="8" transform="rotate(0.8 445 173)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="640" y="146" width="210" height="54" rx="8" transform="rotate(-0.8 745 173)" fill="#1B3139"/>
+          <path d="M274 173 L322 173" marker-end="url(#b2cAr)"/>
+          <path d="M545 142 L525 108" marker-end="url(#b2cAr)"/>
+          <path d="M612 104 L668 140" marker-end="url(#b2cAr)"/>
+          <path d="M564 186 L632 186" marker-end="url(#b2cAr)"/>
+        </g>
+
+        <text class="b2cC" x="42" y="83">0.json</text>
+        <text class="b2cC" x="132" y="83">1.json</text>
+        <text class="b2cS" x="236" y="83">...</text>
+        <text class="b2cC" x="312" y="83">31.json</text>
+        <text class="b2cC" x="402" y="83">32.json</text>
+        <text class="b2cC" x="492" y="83">33.json</text>
+        <text class="b2cC" x="582" y="83">34.json</text>
+        <text class="b2cS" x="670" y="76">solid = read</text>
+        <text class="b2cS" x="670" y="92">dashed = never opened</text>
+        <text class="b2cS" x="30" y="124">v0 to v32 as JSON: skipped</text>
+
+        <text class="b2cC" x="44" y="168">_last_checkpoint</text>
+        <text class="b2cS" x="44" y="188">version 32 · 9 add files</text>
+        <text class="b2cL" x="344" y="168">32.checkpoint.parquet</text>
+        <text class="b2cB" x="344" y="188">complete replay up to v32</text>
+        <text class="b2cW" x="654" y="168">the snapshot</text>
+        <text class="b2cW" x="654" y="188">checkpoint + later JSON</text>
+
+        <text class="b2cS" x="30" y="222">1 · read the pointer file</text>
+        <text class="b2cS" x="330" y="222">2 · load the checkpoint Parquet</text>
+        <text class="b2cS" x="640" y="222">3 · add v33 onward from JSON</text>
+
+        <text class="b2cC" x="30" y="252">your b2 run: {"version":2,"size":5,"sizeInBytes":15132,"numOfAddFiles":1}</text>
+        <text class="b2cN" x="30" y="274">A shortcut, not a requirement: without it a reader replays every JSON file and reaches the same snapshot.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber Parquet file stands in for 33 JSON files; the pointer beside it is how a reader finds the newest checkpoint without replaying from version 0</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What the protocol promises about checkpoints<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A checkpoint "contains the complete replay of all actions" up to its version. Readers should prefer the newest one, and <code>_last_checkpoint</code> points at it. Two constraints keep it honest. For time travel, "the checkpoint used must not be newer than the time travel version": a checkpoint at version 2 cannot answer "what did version 1 hold", so the reader falls back to an older checkpoint or to the JSON. And readers "SHOULD NOT make any assumptions about the existence or frequency of checkpoints". Code that works only when a checkpoint is present is broken code that has not been caught yet.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Who writes them, and how often<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The 2020 Delta Lake paper reports that "By default, our clients write checkpoints every 10 transactions"; that was the reference client the authors describe. delta-rs 1.6.6 behaved differently in this build: on the bench it wrote no checkpoint of its own in 33 commits, and the one at version 32 was made by hand. Tonight's checkpoint is the same: you call <code>create_checkpoint()</code> yourself. Frequency is an engine choice, which is exactly why the protocol tells readers not to count on it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What a checkpoint keeps, and what it drops<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Being the complete replay, a checkpoint holds the current <code>protocol</code> and <code>metaData</code>, every live <code>add</code>, and the <code>remove</code> tombstones that have not yet expired, because VACUUM still needs them. It never keeps <code>commitInfo</code> or <code>cdc</code> actions. So the checkpoint tells you what the table is, not how it got there: the history lives only in the JSON. Session 3 reads that history.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A million partitions, listed in 108 seconds.</strong> The 2020 Delta Lake paper reports a metadata experiment on a table with one million partitions: Delta listed it in 108 seconds, and in 17 seconds with the log cached, while Hive needed over an hour at 10,000 partitions. These are the authors' own measurements of their own system, reported in their paper. The mechanism is tonight's: reading a checkpoint and a few JSON files beats asking an object store to list a folder tree.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Replay the log yourself</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Work in the same folder as session 1, with <code>trips_delta</code> and the January file next to <code>b2.py</code>. The outputs shown are what the laptop path printed when this build ran it with deltalake 1.6.6, straight after <code>b1.py</code>. If yours differ, rebuild the table with <code>b1.py</code> first: it starts from an empty folder.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 238" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The replay loop in five boxes. 1, each JSON file in sorted version order, stopping after the requested version. 2, each line, json.loads gives one action. 3, add puts the path in, remove pops it out. 4, the live set, a dict from path to stats. 5, compare with delta-rs: agrees True at v0, v1 and v2. A loop arrow from box 3 back to box 2: next line, then next file.">
+        <defs>
+          <filter id="b2dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="43" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b2dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b2dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b2dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b2dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b2dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b2dW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b2dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b2dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="56" width="150" height="84" rx="8" transform="rotate(-1 105 98)" fill="#FFFFFF"/>
+          <rect x="200" y="56" width="150" height="84" rx="8" transform="rotate(1 275 98)" fill="#FFF5F3"/>
+          <rect x="370" y="56" width="150" height="84" rx="8" transform="rotate(-1 445 98)" fill="#FFF5F3"/>
+          <rect x="540" y="56" width="150" height="84" rx="8" transform="rotate(1 615 98)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="710" y="56" width="150" height="84" rx="8" transform="rotate(-1 785 98)" fill="#E00F00" stroke="#9E0B00"/>
+          <path d="M184 98 L194 98" marker-end="url(#b2dAr)"/>
+          <path d="M354 98 L364 98" marker-end="url(#b2dAr)"/>
+          <path d="M524 98 L534 98" marker-end="url(#b2dAr)"/>
+          <path d="M694 98 L704 98" marker-end="url(#b2dAr)"/>
+          <path d="M445 146 C445 182 275 182 275 150" marker-end="url(#b2dAr)"/>
+        </g>
+
+        <text class="b2dH" x="42" y="80">1 · each JSON file</text>
+        <text class="b2dS" x="42" y="102">sorted by version,</text>
+        <text class="b2dS" x="42" y="118">stop after upto</text>
+        <text class="b2dH" x="212" y="80">2 · each line</text>
+        <text class="b2dS" x="212" y="102">json.loads gives</text>
+        <text class="b2dS" x="212" y="118">one action</text>
+        <text class="b2dH" x="382" y="80">3 · add or remove</text>
+        <text class="b2dS" x="382" y="102">add puts the path in,</text>
+        <text class="b2dS" x="382" y="118">remove pops it out</text>
+        <text class="b2dH" x="552" y="80">4 · the live set</text>
+        <text class="b2dB" x="552" y="102">a dict: path to</text>
+        <text class="b2dB" x="552" y="118">its stats</text>
+        <text class="b2dW" x="722" y="80">5 · compare</text>
+        <text class="b2dW" x="722" y="102">agrees: True</text>
+        <text class="b2dW" x="722" y="118">at v0, v1, v2</text>
+
+        <text class="b2dS" x="290" y="200">next line, then next file</text>
+
+        <text class="b2dN" x="30" y="226">The replay uses only json, glob and a dict. delta-rs is only the referee in step 5.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber dict is the table at a version; everything else is bookkeeping to fill it in the right order</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Rebuild the starting table.</strong> Run session 1's script in the folder that holds the January file, so the log is exactly two commits long.</p>
+        <div class="prompt-box good"><span class="label">★ Terminal</span>python b1.py</div>
+      </div>
+      <div class="step">
+        <p><strong>List the action kinds in every commit.</strong> Each line is one JSON object with one top-level key; that key is the action type.</p>
+        <div class="prompt-box good"><span class="label">★ b2.py, part 1</span>import json, glob, os
+from deltalake import DeltaTable
+
+LOG = "trips_delta/_delta_log"
+for f in sorted(glob.glob(LOG + "/*.json")):
+    kinds = [list(json.loads(line))[0] for line in open(f)]
+    print(os.path.basename(f), kinds)</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>00000000000000000000.json ['commitInfo', 'protocol', 'metaData', 'add']
+00000000000000000001.json ['commitInfo', 'add']</div>
+      </div>
+      <div class="step">
+        <p><strong>Delete the voided trips.</strong> One more commit, so the log finally holds a <code>remove</code>. The 930 rows with a fare below zero sit in both files, so both are rewritten.</p>
+        <div class="prompt-box good"><span class="label">★ b2.py, part 2</span># one more commit, so the log holds a remove: drop the voided trips
+dt = DeltaTable("trips_delta")
+m = dt.delete("fare_amount &lt; 0")
+print("deleted rows:", m["num_deleted_rows"], "| files removed:", m["num_removed_files"], "| files added:", m["num_added_files"])</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>deleted rows: 930 | files removed: 2 | files added: 1</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the replay and check it at every version.</strong> Your function reads only JSON. delta-rs answers the same question with <code>file_uris()</code> at each version, and the two sets of file names are compared.</p>
+        <div class="prompt-box good"><span class="label">★ b2.py, part 3</span>def replay(path, upto=None):
+    """Rebuild the live file set the way PROTOCOL.md says: newest action per path wins."""
+    live = {}
+    for f in sorted(glob.glob(path + "/_delta_log/*.json")):
+        v = int(os.path.basename(f).split(".")[0])
+        if upto is not None and v &gt; upto:
+            break
+        for line in open(f):
+            a = json.loads(line)
+            if "add" in a:
+                live[a["add"]["path"]] = json.loads(a["add"]["stats"])
+            elif "remove" in a:
+                live.pop(a["remove"]["path"], None)
+    return live
+
+for v in range(DeltaTable("trips_delta").version() + 1):
+    mine = replay("trips_delta", v)
+    theirs = {os.path.basename(u) for u in DeltaTable("trips_delta", version=v).file_uris()}
+    rows = sum(s["numRecords"] for s in mine.values())
+    print(f"v{v}: my replay {len(mine)} files, {rows} rows | delta-rs agrees: {set(mine) == theirs}")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>v0: my replay 1 files, 21617 rows | delta-rs agrees: True
+v1: my replay 2 files, 77033 rows | delta-rs agrees: True
+v2: my replay 1 files, 76103 rows | delta-rs agrees: True</div>
+      </div>
+      <div class="step">
+        <p><strong>Make a checkpoint and read the pointer.</strong> delta-rs did not write one on its own, so you ask for it. A Parquet checkpoint appears for version 2, and <code>_last_checkpoint</code> names it.</p>
+        <div class="prompt-box good"><span class="label">★ b2.py, part 4</span>DeltaTable("trips_delta").create_checkpoint()
+print(sorted(os.listdir(LOG)))
+print(open(LOG + "/_last_checkpoint").read())</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>['00000000000000000000.json', '00000000000000000001.json', '00000000000000000002.checkpoint.parquet', '00000000000000000002.json', '_last_checkpoint']
+{"version":2,"size":5,"sizeInBytes":15132,"numOfAddFiles":1}</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional).</strong> On the managed table you created in session 1, Databricks reads the same kind of log for you. <code>DESCRIBE HISTORY</code> returns one row per commit. <code>DESCRIBE DETAIL</code> returns one row whose <code>numFiles</code> is the number of files in the latest version, the size of your replay's live set, alongside <code>minReaderVersion</code>, <code>minWriterVersion</code> and <code>tableFeatures</code>, the content of the <code>protocol</code> action. This build did not run these statements, so no output is shown.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, SQL cell (not run in this build)</span>DESCRIBE HISTORY your_catalog.your_schema.trips_jan15;
+
+DESCRIBE DETAIL your_catalog.your_schema.trips_jan15;</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ Reading only the newest commit</span># "the latest JSON says which files are live"
+latest = sorted(glob.glob("trips_delta/_delta_log/*.json"))[-1]
+files = [a["add"]["path"] for a in map(json.loads, open(latest)) if "add" in a]
+# at v1 this returns only file B and silently loses the 21,617 morning trips;
+# at v2 it happens to be right, which is how the bug survives review</div>
+
+    <div class="callout tip">
+      <p><strong>The log is the only source of truth for which files count.</strong> Never list the folder and never trust one commit on its own: a commit is a change, not a state. Replay from the newest checkpoint, or from version 0, in ascending order, or let a Delta reader do it for you. The folder holds tombstoned and uncommitted files that no reader should ever count.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 3</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Open <code>00000000000000000002.json</code></strong> in a text editor. Find the two <code>remove</code> lines and match each path to the <code>add</code> in version 0 or version 1 that created it.</li>
+      <li><strong>Extend <code>replay()</code></strong> so it also returns the latest <code>metaData</code> and <code>protocol</code> actions, and print the schema string it finds at version 2.</li>
+      <li><strong>Read the checkpoint</strong> <code>00000000000000000002.checkpoint.parquet</code> with pyarrow, find the rows that hold an <code>add</code>, and confirm the path matches your replay at version 2.</li>
+      <li><strong>Append 16 January</strong> as a new version and check whether delta-rs writes a new checkpoint on its own. Read <code>_last_checkpoint</code> before and after.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 2 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Version 2 holds <code>remove</code> lines for files A and B. What happens to those Parquet files when the commit lands?</p>
+      <button class="qopt" type="button">A · They are deleted from storage in the same commit</button>
+      <button class="qopt" type="button">B · They stay on disk as tombstones: no longer part of the table, kept until VACUUM may delete them</button>
+      <button class="qopt" type="button">C · They are moved into a trash folder inside <code>_delta_log</code></button>
+      <button class="qopt" type="button">D · They are rewritten with the 930 deleted rows blanked out</button>
+      <p class="qwhy">A remove is a logical statement in the log, not a file operation. The bytes stay put, which is what lets you time travel to version 1, until VACUUM deletes unreferenced files after its retention period.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Why must the replay read commits in ascending version order?</p>
+      <button class="qopt" type="button">A · Because glob returns files in random order and sorting is faster</button>
+      <button class="qopt" type="button">B · Because only the newest JSON file contains <code>add</code> actions</button>
+      <button class="qopt" type="button">C · Because delta-rs refuses to open files out of order</button>
+      <button class="qopt" type="button">D · Because the newest action per file wins: A is added at v0 and removed at v2, and only the right order leaves it removed</button>
+      <p class="qwhy">The protocol's rule is newest action per logical file wins. Apply v2's remove before v0's add and file A comes back to life, with 21,617 rows the table no longer holds.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · What is a checkpoint for?</p>
+      <button class="qopt" type="button">A · It is required: a table without one cannot be read</button>
+      <button class="qopt" type="button">B · It stores the full history, including every <code>commitInfo</code>, for auditing</button>
+      <button class="qopt" type="button">C · A shortcut: the complete replay up to a version, so a reader skips the JSON before it; for time travel it must not be newer than the version asked for</button>
+      <button class="qopt" type="button">D · It locks the table so two writers cannot commit at once</button>
+      <p class="qwhy">Checkpoints only save work. Readers must not assume they exist, a checkpoint drops commitInfo and cdc, and atomicity comes from the JSON log entries, not from checkpoints.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Action types, add fields, dataChange, the replay rule, atomicity and checkpoints</span><span class="note">Delta Lake, "Delta Transaction Log Protocol" (PROTOCOL.md), github.com/delta-io/delta, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Checkpoints every 10 transactions in 2020, and the metadata listing times</span><span class="note">Armbrust, M., Das, T., Sun, L., et al. (2020). "Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores." PVLDB 13(12), read at source; the authors' own results</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every printed output in the build-along, and the bench's DELETE commit and missing auto-checkpoint</span><span class="note">Run in this build with deltalake 1.6.6 on the NYC TLC yellow taxi file for January 2024</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">What DESCRIBE DETAIL reports</span><span class="note">Databricks documentation, "Review Delta Lake table details", read at source</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition SQL and the folder-lister story</span><span class="note">The SQL was not run in this build; the analyst is constructed, the row counts are real output</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 2 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Four actions to start</b><span>commitInfo, protocol, metaData, add. remove arrives with the first DELETE.</span></div>
+      <div class="cheat-item"><b>add = live, remove = tombstone</b><span>A tombstone stays on disk for VACUUM; it is no longer the table.</span></div>
+      <div class="cheat-item"><b>Newest action per path wins</b><span>Replay in ascending version. Latest protocol and metaData win too.</span></div>
+      <div class="cheat-item"><b>One JSON = one atomic commit</b><span>Never overwritten. Two writers race for the next number; one wins.</span></div>
+      <div class="cheat-item"><b>Checkpoint = shortcut</b><span>_last_checkpoint points to it. Never assume one exists.</span></div>
+      <div class="cheat-item"><b>Never list the folder</b><span>After v2 it holds 3 files and the table is 1. Ask the log.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Your <code>replay()</code> already takes an <code>upto</code> argument. Session 3 shows that time travel is exactly this replay stopped early: <code>VERSION AS OF 1</code> brings back 77,033 rows, RESTORE writes a new commit that re-adds old files, and VACUUM deletes the tombstoned files that made all of it possible.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 2 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b1-delta-tables-by-hand.html">← Prev: Delta tables by hand</a> &nbsp;·&nbsp; <a href="b3-time-travel-and-restore.html">Next: Time travel and restore →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

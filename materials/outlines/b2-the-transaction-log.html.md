@@ -1,0 +1,25 @@
+# b2-the-transaction-log.html · "Analyst session 2 of 8" · Reading the transaction log
+h1: `Reading the <span class="accent">transaction log</span>` · 🟡 Core · chips "Analysts and engineers who write Python", "Laptop path needs no account"
+Script: materials/build-alongs/b2.py, output b2.out.txt (runs after b1.py on the same trips_delta folder).
+Win: a 15-line Python replay that rebuilds any version's file list from the JSON and agrees with delta-rs, and the ability to read any add, remove or checkpoint line aloud.
+
+Part 1 · covers the four kinds of action · "What one commit file holds" · 5 min live
+- Figure (a b2a): the real version-0 commit of the b1 table taken apart line by line: commitInfo (operation WRITE, engineInfo delta-rs:py-1.6.6), protocol (minReaderVersion 3, minWriterVersion 7, feature timestampNtz), metaData (schema, configuration), add (path, size, modificationTime, dataChange true, stats). Show a real version-1 add's stats from the map/b1 log: numRecords 55416; pickup_ts min "2024-01-15 12:00:02", max "2024-01-15 23:59:58"; fare_amount min -380.0, max 577.0; pu_zone 1 to 265.
+- Cards: (open, Live) the action types and newline-delimited JSON, one action per line (PROTOCOL.md); (Live) the add's fields per PROTOCOL.md: path, partitionValues, size, modificationTime, dataChange, stats, tags, deletionVector, baseRowId, defaultRowCommitVersion, clusteringProvider; (Self) dataChange false means the commit "only rearranges existing data or adds new statistics" (OPTIMIZE uses it).
+- Real world: the bench table's DELETE commit (map section 3): 30 remove, 8 add, 1 cdc in one JSON file, all or nothing.
+
+Part 2 · covers reconciliation · "Newest action per file wins" · 6 min live
+- Figure (b2b): a replay diagram: commits v0, v1, v2 as rows; a running set of live files; v2 (DELETE fare < 0, 930 rows) removes 2 files and adds 1; the set at each version: 1 file 21,617 rows; 2 files 77,033; 1 file 76,103. Removed files become tombstones kept for VACUUM.
+- Cards: (Live) the protocol rule: replay in ascending version, latest protocol and metaData win, newest action per logical file (path, deletion vector id) wins; add = present, remove = tombstone "only exist for the benefit of the VACUUM command". (Live) why atomicity holds: "Delta files are the unit of atomicity"; writers "MUST never overwrite an existing log entry" and use atomic primitives so concurrent writers cannot both win (optimistic concurrency). (Self) deletion vectors: an optional feature that marks deleted rows without rewriting the file; delta-rs 1.6.6 wrote none in this build, so files were rewritten.
+
+Part 3 · covers checkpoints · "Shortcuts through a long log" · 4 min live
+- Figure (b2c): a long log with a checkpoint at version N; a reader opens _last_checkpoint, reads the checkpoint Parquet, then only the JSON after it. Real: b2's _last_checkpoint {"version":2,"size":5,"sizeInBytes":15132,"numOfAddFiles":1}; on the bench, checkpoint at v32 then 1 or 2 JSON commits.
+- Cards: (Live) PROTOCOL: a checkpoint "contains the complete replay of all actions" up to a version; readers should prefer the newest; for time travel the checkpoint "must not be newer than the time travel version"; readers "SHOULD NOT make any assumptions about the existence or frequency of checkpoints". (Live) the 2020 paper's reference client wrote one every 10 transactions; delta-rs 1.6.6 did not write one on its own in 33 commits on the bench; ours was made with create_checkpoint(). (Self) checkpoints keep unexpired tombstones but never commitInfo or cdc actions.
+
+Build-along: copy b2.py in four parts: (1) list each JSON file's action kinds (output lines 1-2); (2) DELETE fare_amount < 0 (output: deleted rows: 930 | files removed: 2 | files added: 1); (3) the replay function and the per-version comparison (output v0/v1/v2 lines with "delta-rs agrees: True"); (4) create_checkpoint and list the log folder (output the folder list and _last_checkpoint line). Free Edition step: `DESCRIBE HISTORY your_catalog.your_schema.trips_jan15;` and `DESCRIBE DETAIL ...` (columns from the map: numFiles, minReaderVersion, minWriterVersion, tableFeatures), not run. Figure (b2d): the four-part build-along drawn as the replay loop: read file → for each line → add/remove → set → compare with delta-rs.
+Bad box: parsing only the latest JSON file to find the table's files. Tip: the log is the only source of truth for which files count; never list the folder.
+Quiz: (1) what a remove action means (tombstone, not physical deletion); (2) why the replay goes in ascending version order; (3) what a checkpoint is for (shortcut, not required, must not be newer than a time-travel version).
+Covered: PROTOCOL.md read at source; Delta Lake paper (checkpoints every 10 transactions in 2020) read at source; outputs run in this build; Free Edition not run.
+Cheat: four actions; add = live, remove = tombstone; newest per path wins; one JSON = one atomic commit; checkpoint = shortcut, _last_checkpoint points to it; never list the folder.
+Next: session 3: time travel is this replay stopped early.
+Footer: prev b1 "Delta tables by hand", next b3 "Time travel and restore".

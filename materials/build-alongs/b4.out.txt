@@ -1,0 +1,5 @@
+loaded: 76758 trips; held back as late: 275
+merge: {'num_target_rows_inserted': 275, 'num_target_rows_updated': 5, 'num_target_rows_deleted': 3}
+change rows by type: [('delete', 3), ('insert', 275), ('update_postimage', 5), ('update_preimage', 5)]
+duplicate source refused: DeltaError
+version now: 1

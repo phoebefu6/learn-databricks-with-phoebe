@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 7 of 8. Track two real models with MLflow on your laptop, register the winner, give it the alias @champion and load it by that alias. Then see what changes on Databricks: tracking is built in, models are named catalog.schema.model, and aliases replace stages.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="MLflow on Databricks - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 7 of 8. Two tracked runs on 61,260 real taxi trips, a registered model with the alias @champion, two refusals worth keeping, and the Databricks names for all of it.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b7-mlflow-on-databricks.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MLflow on Databricks - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 7 of 8. Runs, a registered model, an alias instead of a stage, built on real taxi trips with no account.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 7 · MLflow on Databricks - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 7 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 7 of 8</div>
+    <h1><span class="accent">MLflow</span> on Databricks</h1>
+    <p class="sub">A model you cannot trace back to its data, its settings and its score is a guess with a file extension. MLflow is the habit that fixes that: every training attempt becomes a run that remembers what you tried, and the model you trust gets a name and an alias that the rest of the system loads by. Tonight you track two real models on a day of New York taxi trips, register the better one, point the alias <code>@champion</code> at it and load it by that alias, all on your laptop. Then you see the three things that change on Databricks.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Analysts, data scientists, ML engineers</span>
+      <span class="chip audience">Laptop path needs no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Runs, aliases, two refusals</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: track, register, alias, load</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">The laptop path runs MLflow 3.16.1 with a local sqlite file as its tracking store and scikit-learn 1.9.1 for the models; every output on this page was printed by running it. The data is the same public TLC file as sessions 1 to 6, January 2024 yellow taxi trips, about 50 MB, no login. The Free Edition path shows the same calls with Databricks names; it was not run in this build, so it carries code and no output.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = run, outputs pasted</span>
+      <span class="pill">Free Edition path = the same moves, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> Two tracked runs on 61,260 real card trips, a registered model with the alias <code>@champion</code> that you loaded by alias, and the three things that change on Databricks: tracking is built in, models are named <code>catalog.schema.model</code>, and aliases replace stages.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers tracking</span>
+      <h2>A run remembers what you tried</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">An experiment is a folder of attempts; a run is one attempt. Inside a run you log the parameters you chose, the metrics you got and the model itself with a signature that records its inputs and output. Tonight's experiment, <code>taxi-tips</code>, holds two runs trained on the same split, and the comparison you care about is one number per run.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One experiment called taxi-tips holding two runs. The linear run logged the parameter model equals linear, the metric mae_usd 1.387, a model artifact and a signature with fare, distance and pu_zone as inputs. The forest run logged model equals forest, mae_usd 1.331, a model saved with skops and the same signature. Both were scored on the same test split; the forest has the lowest MAE.">
+        <defs>
+          <filter id="b7aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b7aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b7aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b7aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b7aV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b7aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b7aH" x="30" y="26">experiment taxi-tips  · ONE EXPERIMENT, TWO RUNS</text>
+
+        <g filter="url(#b7aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="820" height="220" rx="10" transform="rotate(-0.2 440 154)" fill="#FFFFFF"/>
+          <rect x="60" y="70" width="340" height="170" rx="8" transform="rotate(-0.6 230 155)" fill="#FFF5F3"/>
+          <rect x="480" y="70" width="340" height="170" rx="8" transform="rotate(0.6 650 155)" fill="#FFF5F3"/>
+          <path d="M406 160 L474 160" stroke-dasharray="5 4"/>
+          <rect x="680" y="200" width="122" height="30" rx="6" transform="rotate(-2 741 215)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M690 46 Q700 36 712 44 Q722 52 734 42"/>
+        </g>
+
+        <text class="b7aH" x="76" y="96">run · linear</text>
+        <text class="b7aS" x="76" y="120">params</text>
+        <text class="b7aC" x="146" y="120">model = linear</text>
+        <text class="b7aS" x="76" y="142">metrics</text>
+        <text class="b7aC" x="146" y="142">mae_usd = 1.387</text>
+        <text class="b7aS" x="76" y="164">artifacts</text>
+        <text class="b7aC" x="146" y="164">model/</text>
+        <text class="b7aS" x="76" y="186">signature</text>
+        <text class="b7aC" x="146" y="186">fare, distance, pu_zone</text>
+        <text class="b7aV" x="76" y="224">MAE $1.387</text>
+
+        <text class="b7aH" x="496" y="96">run · forest</text>
+        <text class="b7aS" x="496" y="120">params</text>
+        <text class="b7aC" x="566" y="120">model = forest</text>
+        <text class="b7aS" x="496" y="142">metrics</text>
+        <text class="b7aC" x="566" y="142">mae_usd = 1.331</text>
+        <text class="b7aS" x="496" y="164">artifacts</text>
+        <text class="b7aC" x="566" y="164">model/  (saved with skops)</text>
+        <text class="b7aS" x="496" y="186">signature</text>
+        <text class="b7aC" x="566" y="186">fare, distance, pu_zone</text>
+        <text class="b7aV" x="496" y="224">MAE $1.331</text>
+        <text class="b7aB" x="694" y="220">lowest MAE</text>
+
+        <text class="b7aS" x="412" y="146">same test</text>
+        <text class="b7aS" x="412" y="180">split</text>
+
+        <text class="b7aN" x="30" y="290">On a laptop the runs land in sqlite:///mlflow.db. On Databricks the workspace is the tracking server.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - two runs scored on the same test split; the one number that decides is mae_usd</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What a run records, and where it goes<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks MLflow documentation describes experiment tracking as logging "parameters, metrics, artifacts, and code versions". In <code>b7.py</code> each run logs one parameter (<code>model</code>), one metric (<code>mae_usd</code>, the mean absolute error of the predicted tip in dollars on the test set) and one artifact, the fitted model with a signature inferred from the test inputs and predictions.</p>
+        <p>On the laptop, <code>mlflow.set_tracking_uri("sqlite:///mlflow.db")</code> tells MLflow where to keep all of that: one sqlite file next to your script. On Databricks you skip that line. The documentation calls it Databricks-managed MLflow: the workspace is the tracking server, and a notebook's runs are recorded there without any setup.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The data behind the two numbers<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The script keeps trips picked up on 15 January 2024 with <code>payment_type = 1</code> (card) and a fare above 0: 61,260 rows. The features are <code>fare_amount</code>, <code>trip_distance</code> and <code>pu_zone</code> (the pickup zone id); the target is <code>tip_amount</code>. A 75/25 train and test split with seed 15 feeds both models, so their scores are comparable.</p>
+        <p>The linear regression scores an MAE of $1.387; the random forest (100 trees, depth 8, seed 15) scores $1.331. That is real data and real error, and the gap is about six cents per trip. Whether six cents is worth a heavier model is a judgement call, and the run history is what lets you make it later with evidence. Before you lean on tips from any other payment type, read how the TLC data dictionary describes <code>tip_amount</code>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>MLflow 3 is bigger than tonight<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks documentation describes MLflow 3 as covering agents and LLM applications as well as classic machine learning, including evaluation of generative output. Tonight stays with classic ML: two regressors, one metric, one registered model. Model serving, vector search and agents on Databricks are outside this track.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>"Which model is in the report?"</strong> An analyst retrains a tip model four times in a week, saving each one as <code>model_final.pkl</code>, <code>model_final2.pkl</code> and so on. A month later a manager asks which one produced the numbers in a board slide, and nobody can say which features or which split it used. With one run per attempt, the answer is a run id with its parameters, metric and model attached. This team is constructed; the failure is the reason tracking exists.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the registry and aliases</span>
+      <h2>Aliases, not stages</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">A run holds a model; the registry gives it a name and numbered versions. Registering the forest's model creates <code>taxi_tip_model</code> version 1. An alias is a named pointer at one version, and code that loads <code>models:/taxi_tip_model@champion</code> gets whatever the alias points to today. Promoting a new model means moving the pointer; the loader never changes.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 324" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The loader asks for models:/taxi_tip_model@champion. The alias @champion is a movable pointer to version 1 of the registered model taxi_tip_model, which came from the forest run with MAE 1.331. A dashed arrow shows the alias could later move to a future version 2 if it wins. On Databricks the name becomes your_catalog.your_schema.taxi_tip_model, governed by Unity Catalog.">
+        <defs>
+          <filter id="b7bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="73" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b7bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b7bC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b7bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b7bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b7bW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b7bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b7bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="70" width="240" height="80" rx="8" transform="rotate(-1 150 110)" fill="#FFFFFF"/>
+          <path d="M274 110 L324 110" marker-end="url(#b7bAr)"/>
+          <rect x="330" y="80" width="150" height="60" rx="8" transform="rotate(1.5 405 110)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M360 154 Q405 172 450 154" marker-end="url(#b7bAr)"/>
+          <rect x="530" y="44" width="320" height="180" rx="10" transform="rotate(0.4 690 134)" fill="#FFF5F3"/>
+          <rect x="550" y="84" width="280" height="56" rx="6" transform="rotate(-0.8 690 112)" fill="#FFFFFF"/>
+          <rect x="550" y="156" width="280" height="52" rx="6" transform="rotate(0.8 690 182)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <path d="M484 104 L544 110" marker-end="url(#b7bAr)"/>
+          <path d="M484 128 L544 178" stroke-dasharray="4 4" marker-end="url(#b7bAr)"/>
+          <rect x="30" y="244" width="820" height="44" rx="8" transform="rotate(-0.3 440 266)" fill="#1B3139"/>
+        </g>
+
+        <text class="b7bH" x="44" y="94">the loader asks for</text>
+        <text class="b7bC" x="44" y="116">models:/taxi_tip_model</text>
+        <text class="b7bC" x="44" y="134">@champion</text>
+
+        <text class="b7bB" x="344" y="106">alias @champion</text>
+        <text class="b7bB" x="344" y="124">a movable pointer</text>
+
+        <text class="b7bH" x="546" y="68">registered model taxi_tip_model</text>
+        <text class="b7bL" x="564" y="106">version 1</text>
+        <text class="b7bS" x="564" y="124">from the forest run, MAE $1.331</text>
+        <text class="b7bS" x="564" y="178">version 2: a future retrain</text>
+        <text class="b7bS" x="564" y="196">gets the alias only if it wins</text>
+
+        <text class="b7bW" x="48" y="271">On Databricks: your_catalog.your_schema.taxi_tip_model@champion, governed by Unity Catalog grants</text>
+
+        <text class="b7bN" x="30" y="314">Unity Catalog does not support stages such as Production. Moving the alias is the promotion.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber pointer is the only thing that moves when a better model arrives</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Models in Unity Catalog: three-part names and aliases<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>On Databricks a registered model lives in Unity Catalog under a three-part name, <code>&lt;catalog&gt;.&lt;schema&gt;.&lt;model&gt;</code>, exactly like a table. The documentation for models in Unity Catalog says <code>mlflow.set_registry_uri("databricks-uc")</code> is the default in MLflow 3, so in a Databricks notebook <code>register_model</code> lands in Unity Catalog without that line; writing it anyway makes the intent visible.</p>
+        <p>The same page is direct about the old workflow: "stages are not supported". Instead of moving a version to Staging or Production, you assign an alias such as <code>@Champion</code> and load with <code>models:/cat.sch.model@Champion</code>. Tonight's laptop registry uses the alias <code>@champion</code> in exactly the same way, with a one-part name because a local sqlite registry has no catalog.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Who may create, add to and load a model<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Because a model sits in the same catalog and schema tree as your tables, the grants from session 6 govern it. The documentation names the privileges: <code>CREATE MODEL</code> plus <code>USE SCHEMA</code> to create a registered model, <code>CREATE MODEL VERSION</code> to add versions to one, and <code>EXECUTE</code> to load it. A scoring job therefore needs <code>EXECUTE</code> on the model, not ownership of it, and a team that retrains needs <code>CREATE MODEL VERSION</code>, not the right to create new models anywhere in the schema.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where the wider MLOps story lives<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Tonight covers the Databricks side: where runs are tracked, how a model is named and how it is promoted. CI for models, monitoring drift in production and feature stores are tooling questions that span vendors; they are taught in <a href="https://phoebefu6.github.io/learn-dataops-with-phoebe/">Learn DataOps with Phoebe</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A scoring job pinned to a version number.</strong> A nightly job loads <code>models:/tips/3</code>. A better version 4 is registered and approved, but the job still loads version 3 until someone edits and redeploys its code, which happens two weeks later. Had the job loaded <code>models:/tips@champion</code>, approval would have been one call that moves the alias, and rolling back would be the same call pointed at 3. This team is constructed; the pattern is the one the Unity Catalog documentation recommends.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers what MLflow refused</span>
+      <h2>Two refusals worth keeping</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Building this session's script hit two errors. Both were MLflow doing its job: one refused to trust a file format it could not vouch for, the other refused an input that did not match the model's recorded contract. Both fixes are now in <code>b7.py</code>, and both are worth understanding before you meet them on a real project.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 316" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two gates. Gate 1, saving the forest: log_model with skops refused because the tree type was not trusted; passing skops_trusted_types with sklearn.tree._tree.Tree vouched for the one type you created, and the run was logged with its model. Gate 2, predicting with the champion: a hand-made row with pu_zone as int64 was refused because the logged signature says int32; predicting on a real test row was accepted.">
+        <defs>
+          <filter id="b7cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="79" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b7cR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b7cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b7cX { font: 600 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .b7cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b7cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b7cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b7cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="400" height="240" rx="12" transform="rotate(-0.3 230 160)" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="450" y="40" width="400" height="240" rx="12" transform="rotate(0.3 650 160)" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="50" y="80" width="150" height="50" rx="6" transform="rotate(-1 125 105)" fill="#FFFFFF"/>
+          <path d="M204 105 L244 105" marker-end="url(#b7cAr)"/>
+          <rect x="250" y="80" width="160" height="50" rx="6" transform="rotate(1 330 105)" fill="#FEF2F2" stroke="#991B1B"/>
+          <path d="M330 134 L330 144" marker-end="url(#b7cAr)"/>
+          <rect x="50" y="148" width="360" height="52" rx="6" transform="rotate(-0.6 230 174)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M230 204 L230 214" marker-end="url(#b7cAr)"/>
+          <rect x="50" y="218" width="360" height="44" rx="6" transform="rotate(0.6 230 240)" fill="#FFFFFF"/>
+          <rect x="470" y="80" width="150" height="50" rx="6" transform="rotate(1 545 105)" fill="#FFFFFF"/>
+          <path d="M624 105 L664 105" marker-end="url(#b7cAr)"/>
+          <rect x="670" y="80" width="160" height="50" rx="6" transform="rotate(-1 750 105)" fill="#FEF2F2" stroke="#991B1B"/>
+          <path d="M750 134 L750 144" marker-end="url(#b7cAr)"/>
+          <rect x="470" y="148" width="360" height="52" rx="6" transform="rotate(0.6 650 174)" fill="#FFFFFF"/>
+          <path d="M650 204 L650 214" marker-end="url(#b7cAr)"/>
+          <rect x="470" y="218" width="360" height="44" rx="6" transform="rotate(-0.6 650 240)" fill="#FFFFFF"/>
+          <rect x="434" y="164" width="12" height="10" rx="2"/>
+          <path d="M436 164 L436 159 Q440 153 444 159 L444 164"/>
+        </g>
+
+        <text class="b7cH" x="48" y="64">Gate 1 · saving the forest</text>
+        <text class="b7cL" x="62" y="102">1 · save forest</text>
+        <text class="b7cS" x="62" y="120">log_model, skops</text>
+        <text class="b7cR" x="262" y="102">2 · refused</text>
+        <text class="b7cX" x="262" y="120">Tree not trusted</text>
+        <text class="b7cB" x="62" y="168">3 · vouch for the one type you created</text>
+        <text class="b7cB" x="62" y="186">skops_trusted_types=["sklearn.tree._tree.Tree"]</text>
+        <text class="b7cL" x="62" y="244">4 · saved, run logged with its model</text>
+
+        <text class="b7cH" x="468" y="64">Gate 2 · predicting with the champion</text>
+        <text class="b7cL" x="482" y="102">1 · predict</text>
+        <text class="b7cS" x="482" y="120">a hand-made row</text>
+        <text class="b7cR" x="682" y="102">2 · refused</text>
+        <text class="b7cX" x="682" y="120">int64 to int32</text>
+        <text class="b7cL" x="482" y="168">3 · the logged signature says int32</text>
+        <text class="b7cS" x="482" y="186">pu_zone's type was fixed when the model was logged</text>
+        <text class="b7cL" x="482" y="244">4 · predict on a real test row: accepted</text>
+
+        <text class="b7cN" x="30" y="306">Both refusals happened while building this session's script. Neither is a bug; both are contracts.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber step is the one to copy carefully: vouch only for the types you created</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Refusal 1: the forest was not trusted<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>MLflow 3.16 saves scikit-learn models with skops, a format that lists the Python types inside a saved model and refuses to load types nobody has vouched for. The linear regression saved without complaint. The random forest did not: its trees are stored as <code>sklearn.tree._tree.Tree</code> objects, and MLflow refused to save the model until the script passed <code>skops_trusted_types=["sklearn.tree._tree.Tree"]</code>.</p>
+        <p>Why so strict? MLflow's own error message explains that loading tree files from an untrusted source can crash the process or read memory out of bounds. The rule to keep: vouch only for types in a model you trained yourself, name them one by one, and never paste a trusted-types list from a model you downloaded.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Refusal 2: the signature is a contract<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>infer_signature(Xte, model.predict(Xte))</code> recorded the model's inputs as they were at logging time, with <code>pu_zone</code> as int32. An early version of the script predicted on a hand-built row where <code>pu_zone</code> was int64, and the loaded model refused it with "Can not safely convert int64 to int32". The fix was not to loosen the check; it was to predict on a real row taken from the test set, which has the logged types. A scoring job that sends the wrong types fails loudly at the door instead of quietly returning a number.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>One JFK trip is a demo, not an evaluation<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The script ends by loading the champion by alias and predicting one real test trip from zone 132, JFK Airport: fare $85.60, 21.66 miles, predicted tip $14.93, actual tip $21.77. It proves the alias resolves and the signature accepts the input. It says nothing about how good the model is; the MAE of $1.331 on the whole test set is the evaluation, and even that is one day of card trips.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>This build, not a hypothetical.</strong> Both refusals in the figure happened while the script on this page was being written with MLflow 3.16.1: the forest would not save until its tree type was vouched for, and the champion would not predict on a row whose zone id had the wrong integer width. Each fix is one line in <code>b7.py</code>, and each would have been the wrong line to "fix" by switching the check off.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Track, register, alias, load</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Work in a folder that holds the January file from session 1. Run the four parts in order as one script. The outputs shown are what the laptop path printed when this build ran it with MLflow 3.16.1 and scikit-learn 1.9.1. Run ids and timestamps in your <code>mlflow.db</code> will differ; the counts and errors printed below should not.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 244" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along as five steps: track two runs in one experiment; compare linear 1.387 against forest 1.331; register taxi_tip_model version 1; point the alias @champion at version 1; load by alias and predict 14.93 on a JFK trip. Underneath, the Databricks names: no set_tracking_uri, the same log_metric calls, cat.sch.taxi_tip_model, @champion, and models:/cat.sch... with @champion.">
+        <defs>
+          <filter id="b7dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="83" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b7dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b7dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b7dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b7dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b7dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b7dC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b7dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b7dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="150" height="90" rx="8" transform="rotate(-1 105 95)" fill="#FFFFFF"/>
+          <rect x="200" y="50" width="150" height="90" rx="8" transform="rotate(1 275 95)" fill="#FFF5F3"/>
+          <rect x="370" y="50" width="150" height="90" rx="8" transform="rotate(-1 445 95)" fill="#FFF5F3"/>
+          <rect x="540" y="50" width="150" height="90" rx="8" transform="rotate(1 615 95)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="710" y="50" width="150" height="90" rx="8" transform="rotate(-1 785 95)" fill="#FFF5F3"/>
+          <path d="M184 95 L194 95" marker-end="url(#b7dAr)"/>
+          <path d="M354 95 L364 95" marker-end="url(#b7dAr)"/>
+          <path d="M524 95 L534 95" marker-end="url(#b7dAr)"/>
+          <path d="M694 95 L704 95" marker-end="url(#b7dAr)"/>
+          <path d="M30 180 Q60 174 90 180 Q120 186 150 180"/>
+        </g>
+
+        <text class="b7dH" x="42" y="76">1 · track</text>
+        <text class="b7dS" x="42" y="96">two runs, one</text>
+        <text class="b7dS" x="42" y="112">experiment</text>
+        <text class="b7dH" x="212" y="76">2 · compare</text>
+        <text class="b7dS" x="212" y="96">linear $1.387</text>
+        <text class="b7dS" x="212" y="112">forest $1.331</text>
+        <text class="b7dH" x="382" y="76">3 · register</text>
+        <text class="b7dS" x="382" y="96">taxi_tip_model</text>
+        <text class="b7dS" x="382" y="112">version 1</text>
+        <text class="b7dH" x="552" y="76">4 · alias</text>
+        <text class="b7dB" x="552" y="96">@champion</text>
+        <text class="b7dB" x="552" y="112">points at v1</text>
+        <text class="b7dH" x="722" y="76">5 · load</text>
+        <text class="b7dS" x="722" y="96">by alias, JFK trip</text>
+        <text class="b7dS" x="722" y="112">predicts $14.93</text>
+
+        <text class="b7dH" x="30" y="170">ON DATABRICKS</text>
+        <text class="b7dC" x="34" y="202">no set_tracking_uri</text>
+        <text class="b7dC" x="204" y="202">same log_* calls</text>
+        <text class="b7dC" x="374" y="202">cat.sch.taxi_tip_model</text>
+        <text class="b7dC" x="544" y="202">@champion</text>
+        <text class="b7dC" x="714" y="202">models:/cat.sch...</text>
+
+        <text class="b7dN" x="30" y="232">The names change on Databricks; the calls and the alias pattern stay the same.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - step 4 is the habit to take to work: code loads the alias, people move the alias</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Install the pinned versions.</strong> This is session 1's line plus MLflow and scikit-learn. If the January file is not already in the folder, fetch it; no account or key is needed.</p>
+        <div class="prompt-box good"><span class="label">★ Terminal</span>pip install deltalake==1.6.6 duckdb==1.5.6 polars==1.44.2 pyarrow==25.0.1 pandas==3.0.6 mlflow==3.16.1 scikit-learn==1.9.1
+curl -O https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet</div>
+      </div>
+      <div class="step">
+        <p><strong>Point MLflow at a local store and load one day of card trips.</strong> The sqlite file is your tracking server for tonight. DuckDB reads the Parquet file in place, and the split is seeded so your MAEs match.</p>
+        <div class="prompt-box good"><span class="label">★ b7.py, part 1</span>import duckdb, mlflow, numpy as np
+from mlflow.models import infer_signature
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split
+
+mlflow.set_tracking_uri("sqlite:///mlflow.db")      # Databricks: the workspace tracks for you
+mlflow.set_experiment("taxi-tips")
+
+df = duckdb.sql("""
+  SELECT fare_amount, trip_distance, PULocationID AS pu_zone, tip_amount
+  FROM 'yellow_tripdata_2024-01.parquet'
+  WHERE tpep_pickup_datetime &gt;= TIMESTAMP '2024-01-15' AND tpep_pickup_datetime &lt; TIMESTAMP '2024-01-16'
+    AND payment_type = 1 AND fare_amount &gt; 0
+""").df()
+X, y = df[["fare_amount", "trip_distance", "pu_zone"]], df["tip_amount"]
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25, random_state=15)
+print("card trips on 15 Jan:", len(df))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, MLflow 3.16.1</span>card trips on 15 Jan: 61260</div>
+      </div>
+      <div class="step">
+        <p><strong>Train two models, one run each.</strong> Every run logs a parameter, a metric and the model with its signature. The forest gets the one trusted type it needs to be saved.</p>
+        <div class="prompt-box good"><span class="label">★ b7.py, part 2</span>runs = {}
+for name, model in [("linear", LinearRegression()), ("forest", RandomForestRegressor(n_estimators=100, max_depth=8, random_state=15))]:
+    with mlflow.start_run(run_name=name) as run:
+        model.fit(Xtr, ytr)
+        mae = mean_absolute_error(yte, model.predict(Xte))
+        mlflow.log_param("model", name)
+        mlflow.log_metric("mae_usd", mae)
+        # MLflow 3 saves sklearn models with skops and refuses tree types unless you vouch for them
+        trusted = ["sklearn.tree._tree.Tree"] if name == "forest" else None
+        mlflow.sklearn.log_model(model, name="model", signature=infer_signature(Xte, model.predict(Xte)),
+                                 skops_trusted_types=trusted)
+        runs[name] = (run.info.run_id, mae)
+        print(f"{name:9s} MAE ${mae:.3f}")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, MLflow 3.16.1</span>linear    MAE $1.387
+forest    MAE $1.331</div>
+      </div>
+      <div class="step">
+        <p><strong>Register the winner and give it the alias.</strong> The lower MAE wins. MLflow also logs <code>Successfully registered model 'taxi_tip_model'.</code> and <code>Created version '1' of model 'taxi_tip_model'.</code> as it goes.</p>
+        <div class="prompt-box good"><span class="label">★ b7.py, part 3</span>best = min(runs, key=lambda k: runs[k][1])
+mv = mlflow.register_model(f"runs:/{runs[best][0]}/model", "taxi_tip_model")
+client = mlflow.MlflowClient()
+client.set_registered_model_alias("taxi_tip_model", "champion", mv.version)
+print("registered taxi_tip_model version", mv.version, "from", best, "as @champion")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, MLflow 3.16.1</span>registered taxi_tip_model version 1 from forest as @champion</div>
+      </div>
+      <div class="step">
+        <p><strong>Load by alias and predict one real trip.</strong> The loader names the alias, never a version number. The row comes from the test set, so its types match the logged signature.</p>
+        <div class="prompt-box good"><span class="label">★ b7.py, part 4</span>champ = mlflow.pyfunc.load_model("models:/taxi_tip_model@champion")
+row = Xte[Xte["pu_zone"] == 132].head(1)        # a real JFK pickup from the test set
+print("champion on a real JFK trip: fare $%.2f, %.2f miles, predicted tip $%.2f, actual tip $%.2f" % (
+    row["fare_amount"].iloc[0], row["trip_distance"].iloc[0], champ.predict(row)[0], yte[row.index[0]]))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, MLflow 3.16.1</span>champion on a real JFK trip: fare $85.60, 21.66 miles, predicted tip $14.93, actual tip $21.77</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional).</strong> Databricks Free Edition is free, non-commercial and serverless only; re-check its limitations page before you rely on any limit, because they change. In a notebook, run parts 1 and 2 without the <code>set_tracking_uri</code> line and with a data source you have uploaded, then register to Unity Catalog with your own names. This build did not run these lines, so there is no output to show; replace the run id with the forest run's id from your experiment.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, notebook cell (not run in this build)</span>import mlflow
+from mlflow import MlflowClient
+
+mlflow.set_registry_uri("databricks-uc")      # already the default in MLflow 3
+run_id = "your_forest_run_id"
+mlflow.register_model(f"runs:/{run_id}/model", "your_catalog.your_schema.taxi_tip_model")
+MlflowClient().set_registered_model_alias("your_catalog.your_schema.taxi_tip_model", "champion", 1)
+champ = mlflow.pyfunc.load_model("models:/your_catalog.your_schema.taxi_tip_model@champion")</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ Two ways to promote a model that you will regret</span># "promote" with a stage: Unity Catalog does not support stages
+client.transition_model_version_stage("taxi_tip_model", 1, "Production")
+
+# "promote" by replacing what the loader pins: delete version 1, register the new model,
+# and every job that loads models:/taxi_tip_model/1 breaks with no record of what it used to load
+client.delete_model_version("taxi_tip_model", 1)</div>
+
+    <div class="callout tip">
+      <p><strong>Move the alias, never the model.</strong> Versions are history; keep them. Promotion is <code>set_registered_model_alias(name, "champion", new_version)</code>, rollback is the same call with the old version, and every loader that asks for <code>@champion</code> follows without a redeploy.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 8</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Add a third run</strong> to the same experiment, for example a forest with <code>max_depth=4</code>, and log <code>max_depth</code> as a parameter. Does it beat $1.331 on the same split? Your numbers will differ from any guess; trust the printout.</li>
+      <li><strong>Register a version 2 and move the alias.</strong> Point <code>@champion</code> at it, rerun part 4 without editing the loader line, then point the alias back at version 1. That round trip is promotion and rollback.</li>
+      <li><strong>Trip the signature on purpose.</strong> Build a one-row DataFrame by hand with <code>pu_zone</code> as int64, predict with the champion, and read the error. Then cast the column to int32 and try again.</li>
+      <li><strong>Browse what you logged</strong> with <code>mlflow ui --backend-store-uri sqlite:///mlflow.db</code>, find both runs in <code>taxi-tips</code>, and open the forest's signature. Write one sentence on what a Databricks workspace gives you here without that command.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 7 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Unity Catalog does not support model stages. What do you use instead to mark the version production code should load?</p>
+      <button class="qopt" type="button">A · A tag called "Production" on the run</button>
+      <button class="qopt" type="button">B · An alias such as <code>@champion</code>, loaded with <code>models:/catalog.schema.model@champion</code></button>
+      <button class="qopt" type="button">C · Always version 1, by convention</button>
+      <button class="qopt" type="button">D · A separate registered model per environment</button>
+      <p class="qwhy">The Unity Catalog documentation says "stages are not supported" and points to aliases. The loader names the alias; promotion moves it.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Your laptop model is <code>taxi_tip_model</code>. What does its name look like when registered in Unity Catalog?</p>
+      <button class="qopt" type="button">A · <code>taxi_tip_model</code>, exactly as on the laptop</button>
+      <button class="qopt" type="button">B · <code>workspace/taxi_tip_model/1</code></button>
+      <button class="qopt" type="button">C · <code>mlflow.taxi_tip_model</code></button>
+      <button class="qopt" type="button">D · <code>your_catalog.your_schema.taxi_tip_model</code>, a three-part name like a table</button>
+      <p class="qwhy">Models in Unity Catalog live in the same catalog and schema tree as tables, which is why the session 6 grants and the model privileges such as EXECUTE apply to them.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · Why did MLflow 3.16 refuse to save the random forest until the script passed <code>skops_trusted_types</code>?</p>
+      <button class="qopt" type="button">A · skops refuses types nobody has vouched for, because loading untrusted tree files can crash or read memory out of bounds</button>
+      <button class="qopt" type="button">B · Random forests cannot be logged to a sqlite tracking store</button>
+      <button class="qopt" type="button">C · The forest's MAE was too high to register</button>
+      <button class="qopt" type="button">D · The signature was missing</button>
+      <p class="qwhy">The linear model saved fine; the forest's <code>sklearn.tree._tree.Tree</code> objects needed an explicit vouch. Vouch only for types in a model you trained yourself.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Experiment tracking and Databricks-managed MLflow; MLflow 3 scope</span><span class="note">Databricks documentation, docs.databricks.com ("MLflow"), read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Three-part model names, databricks-uc as the MLflow 3 default, aliases not stages, model privileges</span><span class="note">Databricks documentation, docs.databricks.com ("Models in Unity Catalog"), read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every printed output in the build-along, and both refusals</span><span class="note">Run in this build with MLflow 3.16.1 and scikit-learn 1.9.1 on the NYC TLC yellow taxi file for January 2024</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition notebook cell and the two team stories</span><span class="note">The cell was not run in this build; the Part 1 and Part 2 teams are constructed</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 7 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Experiment, then runs</b><span>One experiment per question; one run per attempt.</span></div>
+      <div class="cheat-item"><b>Log the evidence</b><span>Params, metrics, the model and its signature, every time.</span></div>
+      <div class="cheat-item"><b>catalog.schema.model</b><span>On Databricks a model is named and governed like a table.</span></div>
+      <div class="cheat-item"><b>Aliases, not stages</b><span>Load models:/name@champion; promote by moving the alias.</span></div>
+      <div class="cheat-item"><b>EXECUTE to load</b><span>CREATE MODEL + USE SCHEMA to create, CREATE MODEL VERSION to add.</span></div>
+      <div class="cheat-item"><b>Vouch only for your own types</b><span>skops_trusted_types for models you trained, never for downloads.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Session 8 is the bench: everything from sessions 1 to 5 on one real log. 8,000 real January trips written through appends, a MERGE, a DELETE, OPTIMIZE and a RESTORE, with the live files and the files each query would read checked against the log at every version.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 7 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b6-unity-catalog-grants.html">← Prev: Unity Catalog grants</a> &nbsp;·&nbsp; <a href="b8-the-delta-log-bench.html">Next: The Delta log bench →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

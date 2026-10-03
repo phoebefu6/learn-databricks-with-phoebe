@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 4 of 8. Apply 5 corrections, 3 cancellations and 275 late taxi trips to a Delta table in one MERGE and one commit, read the change data feed that reports them, and trip two traps on purpose: a duplicated source row and a NULL that is not 'not Y'. Laptop path with deltalake, no account.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="MERGE and change data - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 4 of 8. One MERGE applies inserts, updates and deletes in one commit; the change data feed tells you exactly what changed. Built on 77,033 real taxi trips.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b4-merge-and-change-data.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MERGE and change data - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 4 of 8. One MERGE, one commit, a change feed that reports it, and two traps found on purpose.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 4 · MERGE and change data - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 4 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 4 of 8</div>
+    <h1>MERGE and <span class="accent">change data</span></h1>
+    <p class="sub">Real tables do not only grow. Tips get corrected, trips get cancelled, and cabs that lost their connection send yesterday's trips late. Tonight you apply all three kinds of change to a Delta table in a single MERGE that lands as one commit, then ask the table itself what changed and get back a ledger of every deleted, inserted and updated row. On the way you trip two traps on purpose: a source with two rows for one trip, which Delta refuses, and a NULL flag that quietly loses 2,865 trips if you are not looking.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Analysts and engineers who write Python</span>
+      <span class="chip audience">Laptop path needs no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · MERGE, the change feed, two traps</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: merge a change feed</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Sessions 1 to 3 only ever appended, deleted by a predicate, or went back in time. Change data is messier: a feed arrives with a mix of operations, each row tagged with what should happen to it. The laptop path builds a fresh table, <code>trips_cdf</code>, from 15 January 2024, and every output below was printed by running <code>b4.py</code> with deltalake 1.6.6. The script stands alone, so you do not need the tables from earlier sessions. The Free Edition path shows the same MERGE in SQL, labelled and not run.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = run, outputs pasted</span>
+      <span class="pill">Free Edition path = the same moves, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> One MERGE that applies inserts, updates and deletes in one commit, the change data feed that reports exactly those rows, and two traps found on purpose: a duplicated source row that Delta refuses, and a NULL filter that would have lost 2,865 trips without a word.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers MERGE</span>
+      <h2>Insert, update and delete in one commit</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">MERGE joins a source to a target on a key and then decides, row by row, which clause applies. Tonight's source is a feed of real trip rows, each tagged with an <code>op</code>: U for a tip correction, D for a cancellation, I for a late trip. The target is the table of on-time trips. The join key is <code>trip_id</code>. Everything the MERGE does lands in one new log entry, so readers see either none of the feed or all of it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A change feed of three groups meets the trips_cdf table on trip_id. 5 rows tagged U, tip corrections, go to WHEN MATCHED AND s.op = 'U' THEN UPDATE SET tip_amount and give 5 updated. 3 rows tagged D, cancellations, go to WHEN MATCHED AND s.op = 'D' THEN DELETE and give 3 deleted. 275 rows tagged I, late store-and-forward trips, go to WHEN NOT MATCHED AND s.op = 'I' THEN INSERT and give 275 inserted. All of it is commit version 1.">
+        <defs>
+          <filter id="b4aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b4aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b4aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b4aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b4aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b4aB { font: 800 11px ui-monospace, Menlo, monospace; fill: #4D3200; }
+          .b4aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b4aV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b4aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b4aH" x="30" y="26">SOURCE · THE CHANGE FEED</text>
+        <text class="b4aH" x="310" y="26">ONE MERGE, ONE COMMIT</text>
+        <text class="b4aH" x="670" y="26">TARGET · trips_cdf</text>
+
+        <g filter="url(#b4aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="230" height="236" rx="10" transform="rotate(-0.4 145 162)" fill="url(#b4aHc)"/>
+          <rect x="46" y="60" width="198" height="52" rx="6" transform="rotate(-1.5 145 86)" fill="#FFFFFF"/>
+          <rect x="46" y="128" width="198" height="52" rx="6" transform="rotate(1.2 145 154)" fill="#FFFFFF"/>
+          <rect x="46" y="196" width="198" height="52" rx="6" transform="rotate(-1 145 222)" fill="#FFFFFF"/>
+          <rect x="310" y="44" width="310" height="236" rx="10" transform="rotate(0.4 465 162)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M250 86 L304 86" marker-end="url(#b4aAr)"/>
+          <path d="M250 154 L304 154" marker-end="url(#b4aAr)"/>
+          <path d="M250 222 L304 222" marker-end="url(#b4aAr)"/>
+          <rect x="670" y="60" width="180" height="52" rx="6" transform="rotate(1 760 86)" fill="#FFF5F3"/>
+          <rect x="670" y="128" width="180" height="52" rx="6" transform="rotate(-1 760 154)" fill="#FFF5F3"/>
+          <rect x="670" y="196" width="180" height="52" rx="6" transform="rotate(1.2 760 222)" fill="#FFF5F3"/>
+          <path d="M626 86 L664 86" marker-end="url(#b4aAr)"/>
+          <path d="M626 154 L664 154" marker-end="url(#b4aAr)"/>
+          <path d="M626 222 L664 222" marker-end="url(#b4aAr)"/>
+          <path d="M806 264 L816 274 L840 252"/>
+        </g>
+
+        <text class="b4aL" x="60" y="82">D · 3 cancellations</text>
+        <text class="b4aS" x="60" y="100">made up, real trip_ids</text>
+        <text class="b4aL" x="60" y="150">U · 5 tip corrections</text>
+        <text class="b4aS" x="60" y="168">tip + $1, made up</text>
+        <text class="b4aL" x="60" y="218">I · 275 late trips</text>
+        <text class="b4aS" x="60" y="236">real, store_and_fwd = Y</text>
+
+        <text class="b4aB" x="326" y="62">ON t.trip_id = s.trip_id</text>
+        <text class="b4aB" x="326" y="82">WHEN MATCHED AND s.op = 'D'</text>
+        <text class="b4aB" x="326" y="98">THEN DELETE</text>
+        <text class="b4aB" x="326" y="150">WHEN MATCHED AND s.op = 'U'</text>
+        <text class="b4aB" x="326" y="166">THEN UPDATE SET tip_amount</text>
+        <text class="b4aB" x="326" y="218">WHEN NOT MATCHED AND s.op = 'I'</text>
+        <text class="b4aB" x="326" y="234">THEN INSERT all columns</text>
+        <text class="b4aB" x="326" y="266">lands as commit version 1</text>
+
+        <text class="b4aV" x="684" y="86">3 deleted</text>
+        <text class="b4aC" x="684" y="103">rows_deleted</text>
+        <text class="b4aV" x="684" y="154">5 updated</text>
+        <text class="b4aC" x="684" y="171">rows_updated</text>
+        <text class="b4aV" x="684" y="222">275 inserted</text>
+        <text class="b4aC" x="684" y="239">rows_inserted</text>
+
+        <text class="b4aN" x="30" y="304">Each feed row meets at most one clause. The three counts are the merge dict the script printed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three kinds of change, three clauses, one commit: a reader never sees the cancellations without the late trips</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The clauses, in SQL and in delta-rs<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks MERGE documentation names three kinds of clause. <strong>WHEN MATCHED</strong> fires when a source row finds a target row on the join condition; it can UPDATE or DELETE. <strong>WHEN NOT MATCHED</strong> fires when a source row finds nothing; it can only INSERT. <strong>WHEN NOT MATCHED BY SOURCE</strong> fires for target rows that no source row touched, which is how you delete what a full snapshot no longer contains. Each clause can carry an extra condition, like <code>AND s.op = 'D'</code>, and that is what lets one statement apply a mixed feed.</p>
+        <p>The <code>deltalake</code> package spells the same thing as a builder: <code>DeltaTable(...).merge(source, predicate, source_alias="s", target_alias="t")</code>, then <code>.when_matched_delete(predicate=...)</code>, <code>.when_matched_update(updates=..., predicate=...)</code>, <code>.when_not_matched_insert_all(predicate=...)</code>, and finally <code>.execute()</code>, which returns a dictionary of counts. Nothing is written until <code>execute()</code>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The feed is constructed, the trips are real<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Be clear with your room about what is real here. The 275 late trips are genuine: they are the 15 January trips whose <code>store_and_fwd_flag</code> is 'Y', meaning the cab held the record in memory because it had no server connection and sent it later. The script holds them back from the first load and feeds them in as inserts, which is exactly how they arrive in life. The 5 tip corrections and 3 cancellations are made up: the script picks real trips by position and invents the change. So the counts are real outputs of a constructed feed.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What MERGE does to the files<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Parquet files are never edited in place, so MERGE rewrites the files that hold matched rows: it writes new files with the changes applied, and the commit removes the old ones and adds the new ones. On the bench in analyst session 8, a MERGE of 31 late trips and 270 re-sent trips into a 31-file table removed 1 file and added 1, plus one <code>cdc</code> file for the change feed. How many files a MERGE touches depends on how many files hold matching keys, which is why session 5's layout work matters for MERGE cost too.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The batch that arrived twice.</strong> On the bench, the trips of 12 January are loaded once and then sent again, 270 of them, as a constructed uploader retry. An append would have doubled them. Merged on <code>trip_id</code>, the re-sent rows match existing rows and are rewritten into a new file rather than duplicated, the 31 late trips insert, and the table ends at exactly 8,000 rows, the size of the sample. No duplicates, because the key decided, not the arrival count. Open <a href="b8-the-delta-log-bench.html">the bench</a> to see that commit as version 31.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the change data feed</span>
+      <h2>The table tells you what changed</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">After a MERGE, a downstream job needs to know which rows moved. Re-reading the whole table and diffing it is slow and fragile. The change data feed, switched on with a table property, makes the table keep its own ledger: every changed row, tagged with the kind of change and the commit that made it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left: the trips_cdf folder after the MERGE, with _delta_log holding the version 1 MERGE commit, the Parquet data files with matched files rewritten, and a _change_data folder of cdc files with dataChange false. An arrow leads to the ledger that load_cdf from version 1 returns: delete 3 rows, insert 275, update_postimage 5, update_preimage 5, all with _commit_version 1.">
+        <defs>
+          <filter id="b4bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="43" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b4bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b4bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b4bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b4bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b4bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b4bC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b4bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b4bH" x="30" y="26">trips_cdf/ AFTER THE MERGE</text>
+        <text class="b4bH" x="360" y="26">WHAT load_cdf(starting_version=1) RETURNS</text>
+
+        <g filter="url(#b4bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="280" height="210" rx="10" transform="rotate(-0.3 170 149)" fill="#FFFFFF"/>
+          <rect x="46" y="60" width="248" height="52" rx="6" transform="rotate(-1 170 86)" fill="#FFF5F3"/>
+          <rect x="46" y="124" width="248" height="52" rx="6" transform="rotate(1 170 150)" fill="url(#b4bHc)"/>
+          <rect x="46" y="188" width="248" height="52" rx="6" transform="rotate(-0.8 170 214)" fill="#FFF5F3"/>
+          <rect x="360" y="44" width="490" height="210" rx="10" transform="rotate(0.3 605 149)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M374 88 L836 88" stroke="#4D3200"/>
+          <path d="M314 214 L354 214" marker-end="url(#b4bAr)"/>
+          <path d="M376 238 C420 232 470 244 520 236"/>
+        </g>
+
+        <rect x="54" y="131" width="232" height="38" rx="4" fill="#FFFFFF"/>
+
+        <text class="b4bL" x="60" y="82">_delta_log/</text>
+        <text class="b4bC" x="60" y="100">...0001.json: MERGE</text>
+        <text class="b4bL" x="62" y="146">part-...parquet</text>
+        <text class="b4bS" x="62" y="162">rows; matched files rewritten</text>
+        <text class="b4bL" x="60" y="210">_change_data/</text>
+        <text class="b4bS" x="60" y="228">cdc files, dataChange false</text>
+
+        <text class="b4bB" x="380" y="74">_change_type</text>
+        <text class="b4bB" x="620" y="74">rows</text>
+        <text class="b4bB" x="700" y="74">_commit_version</text>
+        <text class="b4bL" x="380" y="114">delete</text>
+        <text class="b4bL" x="620" y="114">3</text>
+        <text class="b4bL" x="700" y="114">1</text>
+        <text class="b4bL" x="380" y="146">insert</text>
+        <text class="b4bL" x="620" y="146">275</text>
+        <text class="b4bL" x="700" y="146">1</text>
+        <text class="b4bL" x="380" y="178">update_postimage</text>
+        <text class="b4bL" x="620" y="178">5</text>
+        <text class="b4bL" x="700" y="178">1</text>
+        <text class="b4bL" x="380" y="210">update_preimage</text>
+        <text class="b4bL" x="620" y="210">5</text>
+        <text class="b4bL" x="700" y="210">1</text>
+
+        <text class="b4bN" x="30" y="276">Every row also carries _commit_timestamp. An update shows up twice: the row before, then the row after.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber ledger is the table answering "what changed in version 1?" without anyone diffing anything</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Switching it on, and what you get back<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks change data feed documentation is plain about three things. It is <strong>not on by default</strong>: you set <code>delta.enableChangeDataFeed = true</code> on the table. It records <strong>only changes made after</strong> you switch it on, so turn it on at creation if anyone will ever ask "what changed". And each change row carries three extra columns: <code>_change_type</code>, <code>_commit_version</code> and <code>_commit_timestamp</code>. In SQL you read a range of versions with <code>table_changes('t', 0, 10)</code>; in delta-rs with <code>DeltaTable(...).load_cdf(starting_version=...)</code>.</p>
+        <p>There are four change types. <code>insert</code> and <code>delete</code> are one row each. An update produces two rows: <code>update_preimage</code>, the row as it was, and <code>update_postimage</code>, the row as it is now. That is why tonight's 5 tip corrections appear as 10 change rows, and why a consumer can compute the size of each correction without looking anywhere else.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Where the feed lives in the protocol<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>PROTOCOL.md puts change data files in a <code>_change_data</code> folder next to the data files, and records them in the log as <code>cdc</code> actions with <code>dataChange</code> false: they describe a change, they are not part of the table's rows. A reader asked for changes uses the <code>cdc</code> files when a commit has them; when it does not, as with a plain append, the reader treats the commit's added files as inserts and its removed files as deletes. Checkpoints never keep <code>cdc</code> actions, so the feed is read from the JSON commits.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>How long the feed lasts, and who consumes it<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The feed is not an archive. The documentation notes that VACUUM deletes change data files too, under the same retention rules you met in session 3, so a consumer that falls behind the retention window loses changes it never read. Reading the feed continuously, as a stream that picks up each new commit, is streaming work: see <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">Learn streaming data with Phoebe</a>. Building the downstream pipeline that applies those changes elsewhere belongs to <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">Learn data engineering with Phoebe</a>. Here you only need to know the feed exists, what it holds, and when it disappears.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers two traps</span>
+      <h2>The duplicate and the NULL</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Two things go wrong with change data again and again. One fails loudly: a source with two rows for the same key. The other fails silently: a filter that treats a missing flag as if it were a value. You meet both tonight, on purpose, so you recognise them when they turn up uninvited.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left panel, trap 1: two source rows with trip_id X, one with the corrected tip and one with tip_amount 99.0, both match one target row X. The merge is refused with DeltaError and the version stays 1. Right panel, trap 2: on 15 January the store_and_fwd flag is N for 73,893 trips, Y for 275 and NULL for 2,865. A filter of != 'Y' keeps only the N rows, 73,893, and drops the NULLs without error; fill_null with False keeps 76,758.">
+        <defs>
+          <filter id="b4cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="47" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="b4cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b4cR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b4cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b4cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b4cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b4cC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b4cX { font: 600 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .b4cV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b4cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b4cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="400" height="236" rx="12" transform="rotate(-0.3 230 158)" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="450" y="40" width="400" height="236" rx="12" transform="rotate(0.3 650 158)" fill="#FFFFFF" stroke="#FCA5A5"/>
+          <rect x="50" y="92" width="160" height="40" rx="6" transform="rotate(-1 130 112)" fill="#FFFFFF"/>
+          <rect x="50" y="150" width="160" height="40" rx="6" transform="rotate(1 130 170)" fill="#FFFFFF"/>
+          <rect x="270" y="118" width="140" height="46" rx="6" transform="rotate(0.8 340 141)" fill="#FFFFFF" stroke="#991B1B"/>
+          <path d="M214 112 L264 134" marker-end="url(#b4cAr)"/>
+          <path d="M214 170 L264 150" marker-end="url(#b4cAr)"/>
+          <rect x="470" y="96" width="160" height="36" rx="6" transform="rotate(-1 550 114)" fill="#FFFFFF"/>
+          <rect x="470" y="140" width="160" height="36" rx="6" transform="rotate(1 550 158)" fill="#FFFFFF"/>
+          <rect x="470" y="184" width="160" height="36" rx="6" transform="rotate(-0.8 550 202)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M636 160 L652 160" marker-end="url(#b4cAr)"/>
+          <circle cx="814" cy="244" r="10"/>
+          <path d="M821 251 L832 262"/>
+        </g>
+
+        <text class="b4cH" x="48" y="66">Trap 1 · two source rows, one target row</text>
+        <text class="b4cC" x="62" y="109">trip_id X</text>
+        <text class="b4cS" x="62" y="125">tip + $1</text>
+        <text class="b4cC" x="62" y="167">trip_id X</text>
+        <text class="b4cS" x="62" y="183">tip_amount 99.0</text>
+        <text class="b4cL" x="282" y="138">target row X</text>
+        <text class="b4cS" x="282" y="154">which tip wins?</text>
+        <text class="b4cX" x="48" y="226">refused: DeltaError</text>
+        <text class="b4cS" x="48" y="246">version stays 1, nothing guessed</text>
+
+        <text class="b4cR" x="468" y="66">Trap 2 · NULL is not "not Y"</text>
+        <text class="b4cS" x="468" y="84">store_and_fwd on 15 January</text>
+        <text class="b4cL" x="482" y="119">N · 73,893</text>
+        <text class="b4cL" x="482" y="163">Y · 275</text>
+        <text class="b4cB" x="482" y="207">NULL · 2,865</text>
+        <text class="b4cX" x="660" y="116">!= 'Y' keeps N only</text>
+        <text class="b4cV" x="660" y="140">73,893</text>
+        <text class="b4cC" x="660" y="190">fill_null(.., False)</text>
+        <text class="b4cV" x="660" y="214">76,758</text>
+        <text class="b4cS" x="468" y="250">2,865 trips gone, no error raised</text>
+
+        <text class="b4cN" x="30" y="298">One trap fails loudly, the other silently. Only a total that reconciles to 77,033 catches the second.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber box is the 2,865 trips that a NULL comparison drops without a single warning</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Deduplicate the source first<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks MERGE documentation states the rule directly: "A merge operation can fail if multiple rows of the source dataset match and the merge attempts to update the same rows of the target". Two source rows for trip X carry two different tips; MERGE has no honest way to pick one, so it refuses rather than picking by row order. In tonight's run delta-rs raises <code>DeltaError</code> and the table stays at version 1. The documented fix is to deduplicate the source before the MERGE: keep one row per key, chosen by a rule you can defend, such as the latest event timestamp in the feed.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The NULL trap, and the fix<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>On 15 January the flag reads N for 73,893 trips, Y for 275 and NULL for 2,865. "Every trip that was not sent late" sounds like <code>store_and_fwd != 'Y'</code>. But in SQL, <code>NULL != 'Y'</code> is not true, it is NULL, and a filter keeps only rows where the condition is true. So the filter returns 73,893 rows and the 2,865 NULL rows vanish without an error. The script decides explicitly what NULL means, on time, with <code>pc.fill_null(pc.equal(base["store_and_fwd"], "Y"), False)</code> before inverting, and loads 76,758.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why both traps bite harder in change data<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A change feed that is retried after a failure delivers some rows twice, by design: the sender cannot know which rows got through, so it sends them again. That makes duplicate keys normal in CDC sources, not exotic. And change feeds are where nullable status flags live: an op code, a deleted marker, a late flag. Any filter on such a flag needs an explicit rule for NULL, written down next to the filter, because the default rule drops rows quietly.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>This build fell into the second trap.</strong> The first draft of <code>b4.py</code>, written for this session, filtered on-time trips with <code>!= 'Y'</code> and loaded 73,893 trips instead of 76,758. Nothing failed. It was caught only because 73,893 plus the 275 late trips did not add up to 77,033, the day's total from session 1. This is a true story of building these materials, and the reason the tip below exists.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Merge a change feed, then read what changed</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Work in a folder that holds the January file from session 1 (or fetch it again with the command there). Run <code>b4.py</code> in five parts. The outputs shown are what the laptop path printed when this build ran it with deltalake 1.6.6 and DuckDB 1.5.6; the feed is built from fixed row positions, so your counts should match.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along as five steps on a line: load 15 January 2024, 77,033 real trips; split into 76,758 on time and 275 late held back; write the on-time trips as version 0 with the change data feed on; MERGE the feed as version 1, 275 inserted, 5 updated, 3 deleted; read the feed, four change types, and see a duplicate source refused.">
+        <defs>
+          <filter id="b4dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="b4dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b4dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b4dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b4dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b4dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b4dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="150" height="90" rx="8" transform="rotate(-1 105 85)" fill="#FFFFFF"/>
+          <rect x="200" y="40" width="150" height="90" rx="8" transform="rotate(1 275 85)" fill="#FFF5F3"/>
+          <rect x="370" y="40" width="150" height="90" rx="8" transform="rotate(-1 445 85)" fill="#FFF5F3"/>
+          <rect x="540" y="40" width="150" height="90" rx="8" transform="rotate(1 615 85)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="710" y="40" width="150" height="90" rx="8" transform="rotate(-1 785 85)" fill="#FFF5F3"/>
+          <path d="M184 85 L194 85" marker-end="url(#b4dAr)"/>
+          <path d="M354 85 L364 85" marker-end="url(#b4dAr)"/>
+          <path d="M524 85 L534 85" marker-end="url(#b4dAr)"/>
+          <path d="M694 85 L704 85" marker-end="url(#b4dAr)"/>
+          <path d="M846 168 L846 144 L860 149 L846 154"/>
+        </g>
+
+        <text class="b4dH" x="42" y="66">1 · load</text>
+        <text class="b4dS" x="42" y="86">15 January 2024</text>
+        <text class="b4dS" x="42" y="102">77,033 real trips</text>
+        <text class="b4dH" x="212" y="66">2 · split</text>
+        <text class="b4dS" x="212" y="86">76,758 on time</text>
+        <text class="b4dS" x="212" y="102">275 late held back</text>
+        <text class="b4dH" x="382" y="66">3 · version 0</text>
+        <text class="b4dS" x="382" y="86">write on-time trips</text>
+        <text class="b4dS" x="382" y="102">change feed on</text>
+        <text class="b4dH" x="552" y="66">4 · MERGE, v1</text>
+        <text class="b4dB" x="552" y="86">275 in, 5 updated</text>
+        <text class="b4dB" x="552" y="102">3 deleted</text>
+        <text class="b4dH" x="722" y="66">5 · read, break</text>
+        <text class="b4dS" x="722" y="86">4 change types</text>
+        <text class="b4dS" x="722" y="102">dup source refused</text>
+
+        <text class="b4dN" x="30" y="176">Every number in the boxes is printed by the script you run. Only the corrections and cancellations are made up.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - step 4 is the whole session in one commit; step 5 proves it from the table's own ledger</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Load one day and hold the late trips back.</strong> Each trip gets a <code>trip_id</code> from a fixed ordering, so the key is stable across runs. The late trips are the real store-and-forward ones; note the <code>fill_null</code>, which is the fix from Part 3. The table is created with the change data feed already on.</p>
+        <div class="prompt-box good"><span class="label">★ b4.py, part 1</span># Analyst session 4: MERGE a change feed, then read the change data feed (no account needed)
+import shutil
+import duckdb, pyarrow as pa, pyarrow.compute as pc
+from deltalake import write_deltalake, DeltaTable
+
+shutil.rmtree("trips_cdf", ignore_errors=True)
+base = duckdb.sql("""
+  SELECT row_number() OVER (ORDER BY tpep_pickup_datetime, tpep_dropoff_datetime, PULocationID,
+                            DOLocationID, fare_amount, trip_distance, VendorID, tip_amount) AS trip_id,
+         tpep_pickup_datetime AS pickup_ts, PULocationID AS pu_zone, fare_amount, tip_amount,
+         store_and_fwd_flag AS store_and_fwd
+  FROM 'yellow_tripdata_2024-01.parquet'
+  WHERE tpep_pickup_datetime &gt;= TIMESTAMP '2024-01-15' AND tpep_pickup_datetime &lt; TIMESTAMP '2024-01-16'
+""").arrow().read_all()
+late = base.filter(pc.equal(base["store_and_fwd"], "Y"))          # sent late by the cab: real
+ontime = base.filter(pc.invert(pc.fill_null(pc.equal(base["store_and_fwd"], "Y"), False)))  # null flag = on time
+write_deltalake("trips_cdf", ontime, configuration={"delta.enableChangeDataFeed": "true"})
+print("loaded:", ontime.num_rows, "trips; held back as late:", late.num_rows)</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>loaded: 76758 trips; held back as late: 275</div>
+      </div>
+      <div class="step">
+        <p><strong>Build the change feed.</strong> Constructed on real rows: five trips get a tip one dollar higher, three are marked cancelled, and every late trip becomes an insert. Each row carries its <code>op</code>.</p>
+        <div class="prompt-box good"><span class="label">★ b4.py, part 2</span># the change feed (constructed on real rows): 5 tip corrections, 3 cancellations, the late trips
+fix = ontime.slice(100, 5).to_pylist()
+for r in fix:
+    r["tip_amount"] = round(r["tip_amount"] + 1.0, 2); r["op"] = "U"
+cancel = ontime.slice(200, 3).to_pylist()
+for r in cancel:
+    r["op"] = "D"
+ins = late.to_pylist()
+for r in ins:
+    r["op"] = "I"
+feed = pa.Table.from_pylist(fix + cancel + ins)</div>
+      </div>
+      <div class="step">
+        <p><strong>Apply it in one MERGE.</strong> Three clauses, each guarded by the <code>op</code>. Nothing is written until <code>execute()</code>, and then exactly one commit is.</p>
+        <div class="prompt-box good"><span class="label">★ b4.py, part 3</span>m = (DeltaTable("trips_cdf").merge(feed, "t.trip_id = s.trip_id", source_alias="s", target_alias="t")
+     .when_matched_delete(predicate="s.op = 'D'")
+     .when_matched_update(updates={"tip_amount": "s.tip_amount"}, predicate="s.op = 'U'")
+     .when_not_matched_insert_all(predicate="s.op = 'I'")
+     .execute())
+print("merge:", {k: m[k] for k in ("num_target_rows_inserted", "num_target_rows_updated", "num_target_rows_deleted")})</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>merge: {'num_target_rows_inserted': 275, 'num_target_rows_updated': 5, 'num_target_rows_deleted': 3}</div>
+      </div>
+      <div class="step">
+        <p><strong>Ask the table what changed.</strong> Read the change data feed from version 1, the MERGE, and count the rows by change type.</p>
+        <div class="prompt-box good"><span class="label">★ b4.py, part 4</span>cdf = pa.table(DeltaTable("trips_cdf").load_cdf(starting_version=1))
+print("change rows by type:", duckdb.sql("SELECT _change_type, count(*) n FROM cdf GROUP BY 1 ORDER BY 1").fetchall())</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>change rows by type: [('delete', 3), ('insert', 275), ('update_postimage', 5), ('update_preimage', 5)]</div>
+      </div>
+      <div class="step">
+        <p><strong>Break it on purpose.</strong> A source with two rows for the same trip, with two different tips. The MERGE is refused and the version does not move.</p>
+        <div class="prompt-box good"><span class="label">★ b4.py, part 5</span># a source with two rows for one target row is refused, not guessed at
+dup = pa.Table.from_pylist([dict(fix[0]), dict(fix[0], tip_amount=99.0)])
+try:
+    (DeltaTable("trips_cdf").merge(dup, "t.trip_id = s.trip_id", source_alias="s", target_alias="t")
+     .when_matched_update(updates={"tip_amount": "s.tip_amount"}).execute())
+    print("duplicate source merged without error")
+except Exception as e:
+    print("duplicate source refused:", type(e).__name__)
+print("version now:", DeltaTable("trips_cdf").version())</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>duplicate source refused: DeltaError
+version now: 1</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional).</strong> Assume a managed table <code>trips_cdf</code> built from the same day and a feed table with an <code>op</code> column, loaded the way session 1 showed. Switch the feed on, merge, and read the changes. The <code>ALTER TABLE</code> is itself a commit, so check <code>DESCRIBE HISTORY</code> for the MERGE's version number in your workspace. This build did not run these statements; expect the same four change types, and counts that depend on the feed you load.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, SQL cell (not run in this build)</span>ALTER TABLE your_catalog.your_schema.trips_cdf
+  SET TBLPROPERTIES (delta.enableChangeDataFeed = true);
+
+MERGE INTO your_catalog.your_schema.trips_cdf AS t
+USING your_catalog.your_schema.trips_feed AS s
+ON t.trip_id = s.trip_id
+WHEN MATCHED AND s.op = 'D' THEN DELETE
+WHEN MATCHED AND s.op = 'U' THEN UPDATE SET t.tip_amount = s.tip_amount
+WHEN NOT MATCHED AND s.op = 'I' THEN
+  INSERT (trip_id, pickup_ts, pu_zone, fare_amount, tip_amount, store_and_fwd)
+  VALUES (s.trip_id, s.pickup_ts, s.pu_zone, s.fare_amount, s.tip_amount, s.store_and_fwd);
+
+SELECT _change_type, count(*)
+FROM table_changes('your_catalog.your_schema.trips_cdf', 1)
+GROUP BY 1;</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ MERGE straight from a raw feed</span>raw = read_todays_feed()        # retried twice overnight: some trip_ids appear 2 or 3 times
+(DeltaTable("trips_cdf").merge(raw, "t.trip_id = s.trip_id", source_alias="s", target_alias="t")
+   .when_matched_update_all().when_not_matched_insert_all().execute())
+# refused as soon as two feed rows hit one target row, and the run stops there</div>
+
+    <div class="callout tip">
+      <p><strong>Reconcile the totals before you trust a MERGE.</strong> Write down the number you expect before the run and check it after: tonight, 76,758 on time plus 275 late must equal the day's 77,033. A refused MERGE tells you it failed; a lost NULL or a doubled insert never does, and a sum that does not reconcile is often the only alarm you get.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 5</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Fix the duplicate source</strong> by keeping one row per <code>trip_id</code> (for example, the higher tip) and run the MERGE again. Check the version moves to 2 and read the change feed for that version alone.</li>
+      <li><strong>Reproduce the NULL trap</strong>: load with <code>!= 'Y'</code> in DuckDB SQL instead of <code>fill_null</code>, and confirm the count you get against the three flag counts in Part 3.</li>
+      <li><strong>Read the update pairs</strong>: filter the change feed to <code>update_preimage</code> and <code>update_postimage</code>, join them on <code>trip_id</code>, and show the tip before and after for all five corrections.</li>
+      <li><strong>Find the cdc action</strong>: open <code>trips_cdf/_delta_log/00000000000000000001.json</code> and the <code>_change_data</code> folder, and match each file in the folder to a line in the commit.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 4 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · The change feed for tonight's MERGE shows 5 rows of type <code>update_preimage</code>. What are they?</p>
+      <button class="qopt" type="button">A · Rows the MERGE plans to update in a later commit</button>
+      <button class="qopt" type="button">B · The five corrected trips as they were before the update; their <code>update_postimage</code> twins show them after</button>
+      <button class="qopt" type="button">C · Copies of the source feed rows tagged U</button>
+      <button class="qopt" type="button">D · Rows that failed to update and were rolled back</button>
+      <p class="qwhy">An update is reported as two rows: the old version (preimage) and the new one (postimage), both with the MERGE's <code>_commit_version</code>. That is why 5 corrections produce 10 change rows.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · A source holds two rows for the same <code>trip_id</code> with different tips. Why does the MERGE refuse instead of applying one?</p>
+      <button class="qopt" type="button">A · delta-rs cannot update more than one row per commit</button>
+      <button class="qopt" type="button">B · The change data feed must be switched off first</button>
+      <button class="qopt" type="button">C · The source schema does not match the target</button>
+      <button class="qopt" type="button">D · Both rows match one target row and would update it twice; there is no defensible winner, so the merge fails and the version stays unchanged</button>
+      <p class="qwhy">The MERGE docs say a merge can fail when multiple source rows match and try to update the same target row. Picking one would be decided by row order. Deduplicate the source first with a rule you choose.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · Filtering on-time trips with <code>store_and_fwd != 'Y'</code> returned 73,893 rows, not 76,758. Where did the 2,865 trips go?</p>
+      <button class="qopt" type="button">A · They were cancelled trips removed by the MERGE</button>
+      <button class="qopt" type="button">B · DuckDB skipped them because their files had no statistics</button>
+      <button class="qopt" type="button">C · Their flag is NULL, and <code>NULL != 'Y'</code> is not true, so the filter dropped them without an error</button>
+      <button class="qopt" type="button">D · They were late trips held back for the insert</button>
+      <p class="qwhy">A filter keeps rows where the condition is true. A comparison with NULL gives NULL, not true. Decide what NULL means explicitly, as the script does with <code>fill_null</code>, and reconcile the total.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">MERGE clauses and the multiple-match failure; deduplicate the source</span><span class="note">Databricks documentation, MERGE, docs.databricks.com, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Change data feed: enabling, change types, extra columns, table_changes, VACUUM</span><span class="note">Databricks documentation, change data feed, docs.databricks.com, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Change data files in _change_data and cdc actions with dataChange false</span><span class="note">Delta Lake, "Delta Transaction Log Protocol" (PROTOCOL.md), read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every printed output in the build-along, and the flag counts for 15 January</span><span class="note">Run in this build with deltalake 1.6.6, DuckDB 1.5.6 on the NYC TLC yellow taxi file for January 2024</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The change feed and the bench's re-sent batch</span><span class="note">Constructed on real rows: the late trips are real, the corrections, cancellations and retry are made up</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition SQL</span><span class="note">Not run in this build; written from the documented syntax</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>One MERGE, one commit</b><span>Inserts, updates and deletes land together or not at all.</span></div>
+      <div class="cheat-item"><b>Three clauses</b><span>WHEN MATCHED, WHEN NOT MATCHED, WHEN NOT MATCHED BY SOURCE, each with an optional AND condition.</span></div>
+      <div class="cheat-item"><b>Enable the feed first</b><span>delta.enableChangeDataFeed = true; it records only changes after that.</span></div>
+      <div class="cheat-item"><b>Four change types</b><span>insert, delete, update_preimage, update_postimage; plus _commit_version and _commit_timestamp.</span></div>
+      <div class="cheat-item"><b>Dedupe the source</b><span>Two source rows for one target row: refused, version unchanged.</span></div>
+      <div class="cheat-item"><b>NULL is not "not Y"</b><span>!= 'Y' drops NULLs silently. Say what NULL means, then reconcile the total.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Your MERGE rewrote only the files that held matching trips. Session 5 asks the reading side of the same question: why a query on these tables opens some files and skips others, what the per-file statistics in the log do for you, and how OPTIMIZE, Z-order and liquid clustering change which questions get cheap.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 4 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b3-time-travel-and-restore.html">← Prev: Time travel and restore</a> &nbsp;·&nbsp; <a href="b5-data-skipping-and-clustering.html">Next: Data skipping, OPTIMIZE and clustering →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

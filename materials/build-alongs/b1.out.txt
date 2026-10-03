@@ -1,0 +1,9 @@
+morning rows: 21617  afternoon and evening rows: 55416
+version: 1
+data files: 2
+['00000000000000000000.json', '00000000000000000001.json']
+DuckDB rows: 77033
+polars rows: 77033
+pandas rows: 77033
+refused: SchemaMismatchError
+version after the refused write: 1

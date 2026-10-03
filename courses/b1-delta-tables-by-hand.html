@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 1 of 8. Build a real Delta table by hand from one day of NYC taxi trips, on your laptop with the open-source deltalake package and no account, then see the same moves in Databricks Free Edition. Two commits, two Parquet files, one log, three engines reading the same 77,033 rows.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Delta tables by hand - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 1 of 8. A Delta table is Parquet files plus a folder of numbered JSON commits. Build one from 77,033 real taxi trips, read it with DuckDB, polars and pandas, and watch it refuse a bad write.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b1-delta-tables-by-hand.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Delta tables by hand - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 1 of 8. Parquet files plus a log of commits, built from real taxi trips with no account.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 1 · Delta tables by hand - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 1 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 1 of 8</div>
+    <h1>Delta tables <span class="accent">by hand</span></h1>
+    <p class="sub">A Delta table sounds like a database object. On disk it is a folder: ordinary Parquet files, and next to them a <code>_delta_log</code> folder of numbered JSON files that say which Parquet files count. Tonight you build one from a real day of New York taxi trips, on your own laptop with the open-source <code>deltalake</code> package, no account and no cluster. You append to it, read it with three different engines, and watch it refuse a write that would break it. Then you see the same moves in Databricks Free Edition, where the platform does the folder-keeping for you.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Start here</span>
+      <span class="chip audience">Analysts and engineers who write Python</span>
+      <span class="chip audience">Laptop path needs no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Files, a log, three engines</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: your first Delta table</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Every analyst session runs two ways. The laptop path uses <code>deltalake</code> (the Python face of delta-rs, a Rust implementation of the Delta protocol) with DuckDB and polars, and every output on these pages was produced by running it. The Free Edition path shows the same idea inside Databricks, where Unity Catalog manages the folder and Spark or SQL writes to it; those outputs are described, never invented, because the build ran locally. The data is the TLC's public January 2024 yellow taxi file, about 50 MB, no login.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = run, outputs pasted</span>
+      <span class="pill">Free Edition path = the same moves, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A two-version Delta table of 77,033 real trips on your own disk, the ability to point at any file in its folder and say what it is for, three engines agreeing on its row count, and a refused write you caused on purpose.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers what a Delta table is on disk</span>
+      <h2>A folder, some Parquet, and a log</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">The Delta protocol, published as PROTOCOL.md in the delta-io repository, describes the table entirely as files. Data files hold the rows in Parquet. Log entries, JSON files in <code>_delta_log</code> "named using the next available version number, zero-padded to 20 digits", say which data files make up each version. Nothing else is required: no server, no metastore.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The folder you build tonight. trips_delta contains two Parquet data files and a _delta_log folder. The log holds 00000000000000000000.json, which creates the table and adds the morning file of 21,617 trips, and 00000000000000000001.json, which adds the afternoon file of 55,416 trips. Arrows go from each log entry to the data file it adds. Three engines, DuckDB, polars and pandas, read the folder and each reports 77,033 rows.">
+        <defs>
+          <filter id="b1aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="13" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b1aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b1aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b1aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b1aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b1aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b1aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b1aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b1aV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b1aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b1aH" x="30" y="26">trips_delta/  · THE TABLE IS THIS FOLDER</text>
+
+        <g filter="url(#b1aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="560" height="200" rx="10" transform="rotate(-0.3 310 144)" fill="#FFFFFF"/>
+          <rect x="50" y="70" width="250" height="150" rx="8" transform="rotate(0.5 175 145)" fill="#FFF5DC" stroke="#4D3200"/>
+          <rect x="350" y="70" width="220" height="62" rx="6" transform="rotate(-0.8 460 101)" fill="url(#b1aHc)"/>
+          <rect x="350" y="152" width="220" height="62" rx="6" transform="rotate(0.8 460 183)" fill="url(#b1aHc)"/>
+          <path d="M302 108 C326 108 326 101 344 101" marker-end="url(#b1aAr)"/>
+          <path d="M302 178 C326 178 326 183 344 183" marker-end="url(#b1aAr)"/>
+          <rect x="650" y="60" width="200" height="40" rx="6" transform="rotate(-1 750 80)" fill="#FFF5F3"/>
+          <rect x="650" y="120" width="200" height="40" rx="6" transform="rotate(1 750 140)" fill="#FFF5F3"/>
+          <rect x="650" y="180" width="200" height="40" rx="6" transform="rotate(-0.8 750 200)" fill="#FFF5F3"/>
+          <path d="M644 80 L596 120" marker-end="url(#b1aAr)"/>
+          <path d="M644 140 L596 140" marker-end="url(#b1aAr)"/>
+          <path d="M644 200 L596 160" marker-end="url(#b1aAr)"/>
+        </g>
+
+        <text class="b1aB" x="64" y="92">_delta_log/</text>
+        <text class="b1aC" x="64" y="114">...0000.json</text>
+        <text class="b1aS" x="64" y="130">create + add morning file</text>
+        <text class="b1aC" x="64" y="176">...0001.json</text>
+        <text class="b1aS" x="64" y="192">add afternoon file</text>
+        <rect x="358" y="78" width="204" height="44" rx="4" fill="#FFFFFF"/>
+        <rect x="358" y="160" width="204" height="44" rx="4" fill="#FFFFFF"/>
+        <text class="b1aC" x="366" y="96">part-00000-...parquet</text>
+        <text class="b1aS" x="366" y="114">21,617 trips, before noon</text>
+        <text class="b1aC" x="366" y="178">part-00000-...parquet</text>
+        <text class="b1aS" x="366" y="196">55,416 trips, after noon</text>
+        <text class="b1aL" x="664" y="85">DuckDB delta_scan</text>
+        <text class="b1aL" x="664" y="145">polars read_delta</text>
+        <text class="b1aL" x="664" y="205">pandas via deltalake</text>
+        <text class="b1aV" x="664" y="246">77,033 rows</text>
+        <text class="b1aS" x="776" y="246">each</text>
+
+        <text class="b1aN" x="30" y="282">Two commits, two data files, one answer from three engines that never talked to each other.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber folder is the table's memory: delete it and the Parquet files are just files again</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Data files and log entries<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A <strong>data file</strong> is plain Parquet: columnar, compressed, readable by almost anything. Delta never edits one. A <strong>log entry</strong> is a JSON file whose lines are actions; version 0 holds four of them in tonight's table: <code>commitInfo</code> (what happened), <code>protocol</code> (which reader and writer features are needed), <code>metaData</code> (the schema and settings) and <code>add</code> (one data file joins the table, with its size and statistics). Version 1 holds just <code>commitInfo</code> and one <code>add</code>.</p>
+        <p>The protocol calls log entries "the unit of atomicity for a table". A commit either exists as a complete JSON file or does not exist at all, which is how a folder of files gets the all-or-nothing behaviour of a database transaction. Session 2 opens these files line by line.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why three engines agree without talking<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>DuckDB's <code>delta</code> extension, polars and the <code>deltalake</code> package are three separate implementations. They agree on 77,033 rows because each one reads the same log and follows the same rule for which files are live. That is the practical meaning of an open table format: the table's truth lives in files anyone can read, not inside one engine's memory. It is also why a team can write with Spark on Databricks and read with DuckDB on a laptop, as long as both understand the table's protocol version.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A Parquet folder with no log.</strong> A team lands daily Parquet files in a bucket and points two tools at the folder. A load fails halfway and leaves three of its five files behind. One tool counts the partial day, the other has a cached file list and does not, and the two dashboards disagree for a week. With a log, the half-written files are never added by a commit, so no reader treats them as part of the table. The Delta Lake paper describes this exact class of problem: object stores make multi-object updates non-atomic. This team is constructed; the failure mode is the reason the format exists.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers writing, appending and schema enforcement</span>
+      <h2>Every write is a commit, and some are refused</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede"><code>write_deltalake</code> has four modes: <code>error</code> (the default, create the table or fail if it exists), <code>append</code>, <code>overwrite</code> and <code>ignore</code>. Each successful call writes new Parquet files first and then one new log entry. If the new rows do not fit the table's schema, the call fails before any log entry is written, so the table does not change.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before and after. Left: an append whose columns and types match the table writes a Parquet file and then commits version 1; the table moves from 21,617 to 77,033 rows. Right: an append where fare_amount is the string 'twelve dollars' is refused with SchemaMismatchError; no log entry is written and the table stays at version 1.">
+        <defs>
+          <filter id="b1bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="17" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="b1bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b1bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b1bR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b1bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b1bC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b1bX { font: 600 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .b1bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b1bV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b1bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b1bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="40" width="390" height="200" rx="12" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="450" y="40" width="390" height="200" rx="12" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="60" y="120" width="150" height="44" rx="6" transform="rotate(-1 135 142)" fill="#FFFFFF"/>
+          <rect x="260" y="120" width="150" height="44" rx="6" transform="rotate(1 335 142)" fill="#FFF5DC" stroke="#4D3200"/>
+          <path d="M214 142 L254 142" marker-end="url(#b1bAr)"/>
+          <rect x="470" y="120" width="150" height="44" rx="6" transform="rotate(1 545 142)" fill="#FFFFFF" stroke="#991B1B"/>
+          <rect x="670" y="120" width="150" height="44" rx="6" transform="rotate(-1 745 142)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <path d="M624 142 L664 142" stroke="#991B1B" stroke-dasharray="4 4"/>
+        </g>
+
+        <text class="b1bH" x="58" y="66">✓ Columns and types match</text>
+        <text class="b1bS" x="58" y="86">mode="append", 55,416 rows, same 8 columns</text>
+        <text class="b1bL" x="72" y="140">1 · write Parquet</text>
+        <text class="b1bS" x="72" y="156">new file, not live yet</text>
+        <text class="b1bL" x="272" y="140">2 · commit v1</text>
+        <text class="b1bS" x="272" y="156">...0001.json appears</text>
+        <text class="b1bV" x="58" y="212">21,617 → 77,033 rows</text>
+
+        <text class="b1bR" x="468" y="66">✗ fare_amount is a string</text>
+        <text class="b1bX" x="468" y="86">"twelve dollars"</text>
+        <text class="b1bL" x="482" y="140">schema check</text>
+        <text class="b1bX" x="482" y="156">SchemaMismatchError</text>
+        <text class="b1bS" x="682" y="140">no log entry</text>
+        <text class="b1bS" x="682" y="156">written</text>
+        <text class="b1bV" x="468" y="212">still version 1</text>
+
+        <text class="b1bN" x="40" y="276">The schema lives in the log's metaData action, so every writer checks against the same contract.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the refused write leaves no trace in the log, which is what "the table did not change" means</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Schema enforcement, and when you want evolution instead<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The CIDR 2021 lakehouse paper lists schema enforcement among the quality features a metadata layer makes natural: the layer knows the schema, so it can reject records that do not match. In tonight's run a single row with a text fare is refused with <code>SchemaMismatchError</code> and <code>DeltaTable("trips_delta").version()</code> still returns 1.</p>
+        <p>Sometimes a new column is legitimate. <code>write_deltalake</code> takes <code>schema_mode="merge"</code> to add new columns to the table schema in the same commit, and <code>schema_mode="overwrite"</code> together with <code>mode="overwrite"</code> to replace it. Both are deliberate choices recorded in the log, never accidents.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What version 0 recorded about the protocol<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Tonight's table stores <code>pickup_ts</code> as a timestamp with no time zone, because the TLC file records local New York time without one. delta-rs therefore wrote <code>"minReaderVersion":3,"minWriterVersion":7</code> with the feature <code>timestampNtz</code> in version 0. Any engine that reads the table must support that feature. Protocol versions are how a Delta table says "you need at least this much reader to understand me", and session 2 shows them in the raw JSON.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the laptop path and the Free Edition path</span>
+      <h2>Same table idea, two places to build it</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">On the laptop you own the folder and pick the engines. In Databricks the folder still exists, in cloud storage, but Unity Catalog names it <code>catalog.schema.table</code>, tracks who may read it, and Spark or SQL writes the commits. Databricks Free Edition gives you that environment at no cost for learning: serverless compute only, one SQL warehouse limited to 2X-Small, at most 5 concurrent job tasks, non-commercial use.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two paths side by side. Laptop path: a downloaded Parquet file, the deltalake package writes a folder with _delta_log, DuckDB, polars and pandas read it; you manage the folder. Free Edition path: the file is uploaded into the workspace, a serverless notebook or SQL creates a managed table named catalog.schema.table, Unity Catalog tracks it and its permissions; DESCRIBE DETAIL and DESCRIBE HISTORY read the same kind of log.">
+        <defs>
+          <filter id="b1cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="19" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="b1cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b1cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b1cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b1cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b1cW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b1cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b1cH" x="40" y="30">LAPTOP PATH · run in this build</text>
+        <text class="b1cH" x="470" y="30">FREE EDITION PATH · described</text>
+
+        <g filter="url(#b1cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="48" width="170" height="44" rx="6" transform="rotate(-1 125 70)" fill="#FFFFFF"/>
+          <rect x="40" y="122" width="170" height="44" rx="6" transform="rotate(1 125 144)" fill="#FFF5F3"/>
+          <rect x="40" y="196" width="170" height="44" rx="6" transform="rotate(-0.8 125 218)" fill="#FFFFFF"/>
+          <path d="M125 96 L125 116" marker-end="url(#b1cAr)"/>
+          <path d="M125 170 L125 190" marker-end="url(#b1cAr)"/>
+          <rect x="470" y="48" width="170" height="44" rx="6" transform="rotate(1 555 70)" fill="#FFFFFF"/>
+          <rect x="470" y="122" width="170" height="44" rx="6" transform="rotate(-1 555 144)" fill="#FFF5F3"/>
+          <rect x="470" y="196" width="170" height="44" rx="6" transform="rotate(0.8 555 218)" fill="#FFFFFF"/>
+          <path d="M555 96 L555 116" marker-end="url(#b1cAr)"/>
+          <path d="M555 170 L555 190" marker-end="url(#b1cAr)"/>
+          <rect x="670" y="110" width="170" height="68" rx="8" transform="rotate(-1 755 144)" fill="#E00F00" stroke="#9E0B00"/>
+          <path d="M644 144 L664 144" marker-end="url(#b1cAr)"/>
+        </g>
+
+        <text class="b1cL" x="52" y="75">yellow_tripdata_2024-01</text>
+        <text class="b1cL" x="52" y="141">write_deltalake</text>
+        <text class="b1cS" x="52" y="157">folder + _delta_log</text>
+        <text class="b1cL" x="52" y="215">DuckDB · polars · pandas</text>
+        <text class="b1cS" x="52" y="231">you manage the folder</text>
+        <text class="b1cS" x="230" y="146">no account, no cluster,</text>
+        <text class="b1cS" x="230" y="162">every output real</text>
+
+        <text class="b1cL" x="482" y="75">upload the parquet</text>
+        <text class="b1cL" x="482" y="141">notebook or SQL</text>
+        <text class="b1cS" x="482" y="157">CREATE TABLE ... AS</text>
+        <text class="b1cL" x="482" y="215">DESCRIBE DETAIL</text>
+        <text class="b1cS" x="482" y="231">DESCRIBE HISTORY</text>
+        <text class="b1cW" x="682" y="138">Unity Catalog</text>
+        <text class="b1cW" x="682" y="156">catalog.schema.table</text>
+
+        <text class="b1cN" x="40" y="266">Same protocol underneath. The platform adds names, permissions and managed storage on top.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the red box is what the laptop path does not have: a catalog that names the table and decides who may read it</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What Free Edition is, and what it is not<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks describes Free Edition as "perpetually free" and built for "students, hobbyists, and aspiring data and AI professionals"; it replaced the retired Community Edition. Its limitations page lists serverless compute only, one 2X-Small SQL warehouse, 5 concurrent job tasks, outbound internet restricted to trusted domains, one workspace, and non-commercial use only. If you exceed the usage quota, compute shuts down "for the rest of the day (and in extreme cases, the rest of the month)". Re-read that page before you teach from it; the limits change.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Managed tables and why you rarely see the folder<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>In Databricks you usually create a managed table: Unity Catalog chooses where its files live and handles their lifecycle, and you refer to it only by its three-part name. The files and the <code>_delta_log</code> are still there, which is why <code>DESCRIBE DETAIL</code> reports a location, a format of <code>delta</code> and a count of files, and why <code>DESCRIBE HISTORY</code> returns one row per commit. Session 3 reads that history; session 6 covers the permissions.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Your first Delta table, from one real day</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Make an empty folder, put the January file in it, and run each step. The outputs shown are what the laptop path printed when this build ran it with deltalake 1.6.6 and DuckDB 1.5.6. File names inside the folder contain random ids, so yours will differ there and nowhere else.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The build-along as five steps on a line: download the January 2024 file; select 15 January, split at noon into 21,617 and 55,416 trips; write the morning as version 0; append the afternoon as version 1; read with three engines, 77,033 each, then try a bad write that is refused.">
+        <defs>
+          <filter id="b1dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="29" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="b1dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b1dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b1dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b1dW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .b1dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b1dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="150" height="90" rx="8" transform="rotate(-1 105 95)" fill="#FFFFFF"/>
+          <rect x="200" y="50" width="150" height="90" rx="8" transform="rotate(1 275 95)" fill="#FFF5F3"/>
+          <rect x="370" y="50" width="150" height="90" rx="8" transform="rotate(-1 445 95)" fill="#FFF5F3"/>
+          <rect x="540" y="50" width="150" height="90" rx="8" transform="rotate(1 615 95)" fill="#FFF5F3"/>
+          <rect x="710" y="50" width="150" height="90" rx="8" transform="rotate(-1 785 95)" fill="#E00F00" stroke="#9E0B00"/>
+          <path d="M184 95 L194 95" marker-end="url(#b1dAr)"/>
+          <path d="M354 95 L364 95" marker-end="url(#b1dAr)"/>
+          <path d="M524 95 L534 95" marker-end="url(#b1dAr)"/>
+          <path d="M694 95 L704 95" marker-end="url(#b1dAr)"/>
+        </g>
+
+        <text class="b1dH" x="42" y="76">1 · download</text>
+        <text class="b1dS" x="42" y="96">January 2024</text>
+        <text class="b1dS" x="42" y="112">yellow trips, 50 MB</text>
+        <text class="b1dH" x="212" y="76">2 · one day</text>
+        <text class="b1dS" x="212" y="96">15 Jan, split at noon</text>
+        <text class="b1dS" x="212" y="112">21,617 + 55,416</text>
+        <text class="b1dH" x="382" y="76">3 · version 0</text>
+        <text class="b1dS" x="382" y="96">write the morning</text>
+        <text class="b1dS" x="382" y="112">creates the table</text>
+        <text class="b1dH" x="552" y="76">4 · version 1</text>
+        <text class="b1dS" x="552" y="96">append the afternoon</text>
+        <text class="b1dS" x="552" y="112">mode="append"</text>
+        <text class="b1dW" x="722" y="76">5 · read, break</text>
+        <text class="b1dW" x="722" y="96">3 engines: 77,033</text>
+        <text class="b1dW" x="722" y="112">bad write refused</text>
+
+        <text class="b1dN" x="30" y="190">Every number in the boxes is printed by the script you run. Nothing here is modelled.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - step 5 is the one to linger on: three readers agree, and one writer is turned away</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Install the pinned versions and fetch the data.</strong> Work in a new empty folder. The file is public; no account or key is needed.</p>
+        <div class="prompt-box good"><span class="label">★ Terminal</span>pip install deltalake==1.6.6 duckdb==1.5.6 polars==1.44.2 pyarrow==25.0.1 pandas==3.0.6
+curl -O https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet</div>
+      </div>
+      <div class="step">
+        <p><strong>Select one day and split it at noon.</strong> DuckDB reads the Parquet file in place. The columns are renamed to what the rest of the track uses.</p>
+        <div class="prompt-box good"><span class="label">★ b1.py, part 1</span>import os, shutil
+import duckdb, polars as pl
+from deltalake import write_deltalake, DeltaTable
+
+shutil.rmtree("trips_delta", ignore_errors=True)
+SQL = """
+SELECT VendorID AS vendor_id, tpep_pickup_datetime AS pickup_ts,
+       PULocationID AS pu_zone, DOLocationID AS do_zone,
+       trip_distance, fare_amount, tip_amount, payment_type
+FROM 'yellow_tripdata_2024-01.parquet'
+WHERE tpep_pickup_datetime &gt;= TIMESTAMP '{a}'
+  AND tpep_pickup_datetime &lt;  TIMESTAMP '{b}'
+"""
+morning = duckdb.sql(SQL.format(a="2024-01-15 00:00", b="2024-01-15 12:00")).arrow().read_all()
+evening = duckdb.sql(SQL.format(a="2024-01-15 12:00", b="2024-01-16 00:00")).arrow().read_all()
+print("morning rows:", morning.num_rows, " afternoon and evening rows:", evening.num_rows)</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>morning rows: 21617  afternoon and evening rows: 55416</div>
+      </div>
+      <div class="step">
+        <p><strong>Create the table, append to it, and look in the folder.</strong> The first call creates version 0; the append is version 1.</p>
+        <div class="prompt-box good"><span class="label">★ b1.py, part 2</span>write_deltalake("trips_delta", morning)                  # creates the table: version 0
+write_deltalake("trips_delta", evening, mode="append")   # version 1
+
+dt = DeltaTable("trips_delta")
+print("version:", dt.version())
+print("data files:", len(dt.file_uris()))
+print(sorted(os.listdir("trips_delta/_delta_log")))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>version: 1
+data files: 2
+['00000000000000000000.json', '00000000000000000001.json']</div>
+      </div>
+      <div class="step">
+        <p><strong>Read it with three engines.</strong> DuckDB installs its <code>delta</code> extension on first use, polars and pandas go through delta-rs. None of them is told how many files there are.</p>
+        <div class="prompt-box good"><span class="label">★ b1.py, part 3</span>print("DuckDB rows:", duckdb.sql("INSTALL delta; LOAD delta; SELECT count(*) FROM delta_scan('trips_delta')").fetchone()[0])
+print("polars rows:", pl.read_delta("trips_delta").height)
+print("pandas rows:", len(dt.to_pandas()))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>DuckDB rows: 77033
+polars rows: 77033
+pandas rows: 77033</div>
+      </div>
+      <div class="step">
+        <p><strong>Break it on purpose.</strong> Append one row whose fare is text. The write is refused and the version does not move.</p>
+        <div class="prompt-box good"><span class="label">★ b1.py, part 4</span>bad = pl.DataFrame({"vendor_id": [1], "fare_amount": ["twelve dollars"]}).to_arrow()
+try:
+    write_deltalake("trips_delta", bad, mode="append")
+except Exception as e:
+    print("refused:", type(e).__name__)
+print("version after the refused write:", DeltaTable("trips_delta").version())</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>refused: SchemaMismatchError
+version after the refused write: 1</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional).</strong> Upload the same Parquet file into your workspace, then create a managed table from it in a SQL cell and inspect it. Menu names in the workspace change between releases, so find the upload page from the workspace's own help if the wording differs. This build did not run these statements; expect <code>DESCRIBE HISTORY</code> to show one row per commit, like the two JSON files above.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, SQL cell (not run in this build)</span>CREATE TABLE your_catalog.your_schema.trips_jan15 AS
+SELECT VendorID AS vendor_id, tpep_pickup_datetime AS pickup_ts,
+       PULocationID AS pu_zone, DOLocationID AS do_zone,
+       trip_distance, fare_amount, tip_amount, payment_type
+FROM read_files('/Volumes/your_catalog/your_schema/your_volume/yellow_tripdata_2024-01.parquet')
+WHERE tpep_pickup_datetime &gt;= '2024-01-15' AND tpep_pickup_datetime &lt; '2024-01-16';
+
+DESCRIBE DETAIL your_catalog.your_schema.trips_jan15;
+DESCRIBE HISTORY your_catalog.your_schema.trips_jan15;</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The habit that breaks a Delta table</span>rm trips_delta/part-00000-*.parquet     # "cleaning up" files by hand
+cp new_day.parquet trips_delta/        # adding files without a commit
+# the log still lists the deleted file and never lists the new one</div>
+
+    <div class="callout tip">
+      <p><strong>Touch the folder only through the log.</strong> A file you add by hand is invisible to every reader; a file you delete by hand makes the table unreadable at every version that lists it. Writes, deletes and cleanup all go through commands that write a commit, which sessions 2 and 3 take apart.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 2</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Add a third version</strong> by appending 16 January, and confirm all three engines report the new total.</li>
+      <li><strong>Try <code>mode="overwrite"</code></strong> with just the morning rows. Count the files in the folder and the files <code>dt.file_uris()</code> returns; explain why they differ.</li>
+      <li><strong>Add a column on purpose</strong> with <code>schema_mode="merge"</code>, for example a computed <code>tip_share</code>, and read the new schema.</li>
+      <li><strong>Open <code>00000000000000000001.json</code></strong> in a text editor and find the <code>numRecords</code> value. Session 2 starts from that file.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 1 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · What makes the folder <code>trips_delta</code> a Delta table rather than a folder of Parquet files?</p>
+      <button class="qopt" type="button">A · The Parquet files use a special Delta encoding</button>
+      <button class="qopt" type="button">B · A server process registered it</button>
+      <button class="qopt" type="button">C · The <code>_delta_log</code> folder of numbered JSON commits that say which data files make up each version</button>
+      <button class="qopt" type="button">D · The folder name ends in "_delta"</button>
+      <p class="qwhy">The data files are ordinary Parquet. The log is the table: it defines versions, schema, protocol and which files count. Without it, the files are just files.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · An append with a text fare fails with SchemaMismatchError. What is the table's version afterwards, and why?</p>
+      <button class="qopt" type="button">A · Still 1: the write is checked against the schema in the log and refused before any commit is written</button>
+      <button class="qopt" type="button">B · 2, with the bad row converted to null</button>
+      <button class="qopt" type="button">C · 2, with the bad row quarantined in a separate file</button>
+      <button class="qopt" type="button">D · 0, because a failed write rolls the table back to the start</button>
+      <p class="qwhy">No commit, no change. The refused write may leave nothing behind or an orphan file at most, and no reader will ever treat an uncommitted file as part of the table.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · DuckDB, polars and pandas all report 77,033 rows. Why can three separate engines agree without coordinating?</p>
+      <button class="qopt" type="button">A · They share a cache</button>
+      <button class="qopt" type="button">B · delta-rs runs inside all three</button>
+      <button class="qopt" type="button">C · The row count is stored in the folder name</button>
+      <button class="qopt" type="button">D · Each reads the same log and applies the same protocol rule for which files are live</button>
+      <p class="qwhy">An open table format puts the table's truth in readable files. Any engine that implements the protocol arrives at the same set of live files, and therefore the same rows.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Data files, log entries named by zero-padded version, the unit of atomicity</span><span class="note">Delta Lake, "Delta Transaction Log Protocol" (PROTOCOL.md), read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every printed output in the build-along</span><span class="note">Run in this build with deltalake 1.6.6, DuckDB 1.5.6, polars 1.44.2 on the NYC TLC yellow taxi file for January 2024</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Schema enforcement as a metadata-layer feature</span><span class="note">Armbrust et al., "Lakehouse", CIDR 2021, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Free Edition limits and positioning</span><span class="note">Databricks documentation, "Free Edition limitations", and databricks.com/learn/free-edition, read at source</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition SQL and the Parquet-folder story</span><span class="note">The SQL was not run in this build; the team story is constructed</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>A table is a folder</b><span>Parquet data files plus _delta_log of numbered JSON commits.</span></div>
+      <div class="cheat-item"><b>Write, then commit</b><span>New files first, then one log entry. No entry, no change.</span></div>
+      <div class="cheat-item"><b>Four modes</b><span>error (default), append, overwrite, ignore.</span></div>
+      <div class="cheat-item"><b>Schema is enforced</b><span>A text fare is refused: SchemaMismatchError, version unchanged.</span></div>
+      <div class="cheat-item"><b>Any engine, same rows</b><span>DuckDB delta_scan, polars read_delta, pandas: 77,033 each.</span></div>
+      <div class="cheat-item"><b>Never hand-edit the folder</b><span>Adds and deletes go through commands that commit.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Two JSON files made your table. Session 2 reads them line by line: the four kinds of action, the statistics hidden in every <code>add</code>, what a <code>remove</code> leaves behind, and a fifteen-line Python replay that rebuilds the table's file list and agrees with delta-rs at every version.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 1 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="b2-the-transaction-log.html">Next: Reading the transaction log →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+00000000000000000000.json ['commitInfo', 'protocol', 'metaData', 'add']
+00000000000000000001.json ['commitInfo', 'add']
+deleted rows: 930 | files removed: 2 | files added: 1
+v0: my replay 1 files, 21617 rows | delta-rs agrees: True
+v1: my replay 2 files, 77033 rows | delta-rs agrees: True
+v2: my replay 1 files, 76103 rows | delta-rs agrees: True
+['00000000000000000000.json', '00000000000000000001.json', '00000000000000000002.checkpoint.parquet', '00000000000000000002.json', '_last_checkpoint']
+{"version":2,"size":5,"sizeInBytes":15132,"numOfAddFiles":1}
+

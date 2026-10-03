@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 4 of 6. Notebooks versus jobs: interactive work and automated work run on different compute at different prices, a Lakeflow job is a graph of tasks with a trigger, and a notebook needs parameters, an owner and a governed output before it runs on a schedule.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Notebooks versus jobs - learn databricks with phoebe">
+<meta property="og:description" content="Leader session 4 of 6. Two kinds of work, two kinds of compute, two prices per DBU-hour, and the checklist a notebook passes before it runs at 2am.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/a4-notebooks-vs-jobs.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Notebooks versus jobs - learn databricks with phoebe">
+<meta name="twitter:description" content="Leader session 4 of 6. Interactive or automated, and is it on the compute that matches?">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 4 · Notebooks versus jobs - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Leader session 4 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Leader track · Session 4 of 6</div>
+    <h1>Notebooks versus <span class="accent">jobs</span></h1>
+    <p class="sub">Every Databricks team starts in notebooks, and it should: a notebook is where a person asks a question and sees the answer a second later. The trouble starts on the day a useful notebook gets scheduled exactly as it is, on the cluster its author happened to have open. Tonight is about the line between interactive work and automated work: why Databricks prices them differently, what a job actually is, and the short checklist a notebook should pass before it is allowed to run at 2am without anyone watching.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Data leaders, analytics and ML managers</span>
+      <span class="chip audience">No code</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Two kinds of work, one graph of tasks</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: the promote checklist</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 3 decided who may see which table. This session decides how work reaches those tables. A person exploring data and a pipeline that refreshes a forecast every night both run code on Databricks, but they need different things: the person needs compute that stays warm between thoughts, the pipeline needs compute that starts, finishes and disappears. Databricks names the two, prices the two, and gives the second one its own product, Lakeflow Jobs. A leader who can tell them apart catches the most common cost mistake on the platform before the bill does.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A promote-a-notebook checklist your team uses before anything runs on a schedule, and the habit of asking one question of every piece of work you hear about: "is this interactive work or automated work, and is it on the compute that matches?"</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers interactive and automated work</span>
+      <h2>Two kinds of work, two kinds of compute</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Interactive work has a human in the loop: run a cell, read the result, think, run the next one. Automated work has no human in the loop: a trigger fires, tasks run in order, the result lands somewhere. The compute that suits one is the wrong shape for the other, and the price list says so in plain words.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 344" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two lanes. Top lane, interactive: a person runs notebook cells by hand on an all-purpose cluster. The cluster bar shows short bursts of work separated by a long idle stretch that is still billed, and it keeps waiting until someone stops it. List rate 0.55 dollars per DBU-hour. Bottom lane, automated: a schedule or event triggers a job run; job compute starts, runs three tasks in order, and stops, after which nothing is billed. List rate 0.30 dollars per DBU-hour. Underneath, the four compute types from the Databricks compute docs: serverless for notebooks, serverless for jobs, classic compute, SQL warehouses.">
+        <defs>
+          <filter id="a4aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="43" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a4aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a4aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a4aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a4aV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .a4aW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .a4aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a4aH" x="30" y="28">INTERACTIVE · a person in a notebook</text>
+        <text class="a4aH" x="30" y="168">AUTOMATED · a job on a trigger</text>
+
+        <g filter="url(#a4aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- lane 1: notebook on all-purpose -->
+          <rect x="40" y="46" width="150" height="56" rx="6" transform="rotate(-1.5 115 74)" fill="#FFF5F3"/>
+          <path d="M194 74 L234 74" marker-end="url(#a4aAr)"/>
+          <rect x="240" y="50" width="460" height="46" rx="6" transform="rotate(0.3 470 73)" fill="#FFFFFF"/>
+          <rect x="254" y="60" width="14" height="26" rx="2" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="290" y="60" width="14" height="26" rx="2" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="324" y="58" width="134" height="30" rx="4" transform="rotate(-0.6 391 73)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="474" y="60" width="14" height="26" rx="2" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="508" y="60" width="14" height="26" rx="2" fill="#E00F00" stroke="#9E0B00"/>
+          <!-- lane 2: job on job compute -->
+          <circle cx="64" cy="216" r="18" fill="#FFFFFF"/>
+          <path d="M64 216 L64 204 M64 216 L74 220"/>
+          <path d="M86 216 L114 216" marker-end="url(#a4aAr)"/>
+          <rect x="120" y="188" width="110" height="56" rx="6" transform="rotate(1.2 175 216)" fill="#FFF5F3"/>
+          <path d="M234 216 L238 216"/>
+          <rect x="240" y="194" width="250" height="46" rx="6" transform="rotate(-0.3 365 217)" fill="#FFFFFF"/>
+          <rect x="250" y="203" width="70" height="28" rx="3" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="328" y="203" width="70" height="28" rx="3" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="406" y="203" width="70" height="28" rx="3" fill="#E00F00" stroke="#9E0B00"/>
+          <path d="M494 217 L700 217" stroke="#C4CFD3" stroke-dasharray="5 5"/>
+          <!-- the four compute types -->
+          <rect x="30" y="274" width="196" height="30" rx="5" transform="rotate(-0.8 128 289)" fill="#FFFFFF"/>
+          <rect x="240" y="274" width="196" height="30" rx="5" transform="rotate(0.7 338 289)" fill="#FFFFFF"/>
+          <rect x="450" y="274" width="196" height="30" rx="5" transform="rotate(-0.6 548 289)" fill="#FFFFFF"/>
+          <rect x="660" y="274" width="196" height="30" rx="5" transform="rotate(0.8 758 289)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="a4aL" x="52" y="70">notebook</text>
+        <text class="a4aS" x="52" y="88">cells run by hand</text>
+        <text class="a4aB" x="334" y="77">idle, still billed</text>
+        <text class="a4aS" x="540" y="77">waits for you</text>
+        <text class="a4aS" x="240" y="116">all-purpose cluster: stays on between cells</text>
+        <text class="a4aV" x="724" y="74">$0.55</text>
+        <text class="a4aS" x="724" y="92">per DBU-hour</text>
+
+        <text class="a4aS" x="30" y="250">schedule</text>
+        <text class="a4aS" x="30" y="263">or event</text>
+        <text class="a4aL" x="132" y="212">job run</text>
+        <text class="a4aS" x="132" y="230">tasks in order</text>
+        <text class="a4aW" x="262" y="222">task 1</text>
+        <text class="a4aW" x="340" y="222">task 2</text>
+        <text class="a4aW" x="418" y="222">task 3</text>
+        <text class="a4aS" x="520" y="204">stopped: nothing billed</text>
+        <text class="a4aV" x="724" y="214">$0.30</text>
+        <text class="a4aS" x="724" y="232">per DBU-hour</text>
+
+        <text class="a4aL" x="42" y="294">serverless for notebooks</text>
+        <text class="a4aL" x="252" y="294">serverless for jobs</text>
+        <text class="a4aL" x="462" y="294">classic compute</text>
+        <text class="a4aL" x="672" y="294">SQL warehouses</text>
+
+        <text class="a4aN" x="30" y="330">Rates: Azure Databricks Premium, East US, pay as you go, read 3 October 2026. AWS and GCP list prices differ.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber stretch is the whole lesson: interactive compute is paid for while a person thinks</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Four kinds of compute, in the docs' words<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks compute documentation sorts compute into four kinds: <strong>serverless compute for notebooks</strong>, <strong>serverless compute for jobs</strong>, <strong>classic compute</strong>, and <strong>SQL warehouses</strong>. Serverless compute, in the docs' phrase, runs "in the serverless compute plane, which is managed by Databricks": you do not choose or manage the machines. Classic compute is the kind your team configures, machine type and size included, and it comes in the two flavours the price list separates: all-purpose for people and jobs compute for automated runs. SQL warehouses serve SQL and dashboards, and session 5 prices them by size.</p>
+        <p>Notice that the split between people and pipelines runs through all of it. Even serverless comes in a notebook flavour and a jobs flavour. The question "interactive or automated?" is built into the product, not added by finance afterwards.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The price list names the difference<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Azure Databricks pricing page describes all-purpose compute as for "Interactive workloads to analyze data collaboratively with notebooks" and jobs compute as for "Automated workloads to run fast and robust jobs via API or UI". The list rates, Azure Databricks Premium, East US, pay as you go, read 3 October 2026: <strong>$0.55 per DBU-hour all-purpose, $0.30 per DBU-hour jobs</strong>. All-purpose costs 1.83 times as much per DBU for the same machines. AWS and GCP list prices differ, so re-read your own cloud's page before quoting a number to anyone.</p>
+        <p>A DBU is Databricks' unit of processing, billed per second; session 5 is the full arithmetic. For tonight, one fact is enough: the same work on the same cluster size costs less as a job than as a notebook someone left attached.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Databricks' default answer: serverless<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The classic compute best practices page says it directly: "For most new workloads, Databricks recommends using serverless compute." Read that as the vendor's recommendation, which it is, with real reasons behind it: no cluster to size, no cluster to forget to stop. The same Azure price list shows the interactive and automated split survives the move: interactive serverless is listed at $0.95 per DBU-hour and automated serverless at $0.45. Do not set those two rates beside the classic ones and pick a winner; session 5 does the arithmetic.</p>
+        <p>If your team learns on the Free Edition, serverless is all there is: it is free, for non-commercial use, and serverless only, with no custom compute. The limits change, so re-check the Free Edition limitations page before you plan a course or a pilot around them.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The forecast notebook (constructed).</strong> An analytics manager builds a weekly demand forecast in a notebook on the team's shared all-purpose cluster. It works, people start relying on it, and she clicks "schedule" from inside the notebook so it runs every night. Nothing about the code changed. What changed is that a person-shaped resource is now doing pipeline-shaped work: billed at the all-purpose rate, sharing a cluster with whoever is exploring at 2am, and reading a date she still edits by hand on Mondays. Part 3 follows this notebook through its promotion.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers Lakeflow Jobs</span>
+      <h2>A job is a graph of tasks</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Lakeflow Jobs is Databricks' name for automated work. The documentation describes a job as a set of tasks coordinated as a directed acyclic graph, a DAG: each task waits for the tasks it depends on, and nothing loops back. A trigger decides when the whole graph starts.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 318" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A Lakeflow job drawn as a graph. Two triggers on the left: a clock for time-based and a file arriving for event-based. Both start an ingest task, a notebook. Ingest feeds two transform tasks, a Python script and a pipeline. Transform A feeds a model-scoring notebook and, with transform B, a dashboard-refresh task. A side panel lists documented limits: up to 1,000 tasks per job, 2,000 concurrent task runs per workspace, 12,000 saved jobs; Free Edition allows 5 concurrent job tasks per account.">
+        <defs>
+          <filter id="a4bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="47" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a4bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a4bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a4bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a4bV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .a4bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a4bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- job frame -->
+          <rect x="170" y="36" width="540" height="234" rx="10" transform="rotate(-0.3 440 153)" fill="#FCFAF7"/>
+          <rect x="184" y="48" width="74" height="22" rx="4" transform="rotate(-2 221 59)" fill="#FFAB00" stroke="#4D3200"/>
+          <!-- triggers -->
+          <circle cx="66" cy="104" r="18" fill="#FFFFFF"/>
+          <path d="M66 104 L66 92 M66 104 L76 108"/>
+          <path d="M50 186 L74 186 L84 196 L84 228 L50 228 Z" fill="url(#a4bHc)"/>
+          <path d="M88 108 L184 146" marker-end="url(#a4bAr)"/>
+          <path d="M92 206 L184 164" marker-end="url(#a4bAr)"/>
+          <!-- tasks -->
+          <rect x="190" y="132" width="110" height="44" rx="6" transform="rotate(1.5 245 154)" fill="#FFF5F3"/>
+          <rect x="350" y="82" width="124" height="44" rx="6" transform="rotate(-1.8 412 104)" fill="#FFFFFF"/>
+          <rect x="350" y="182" width="124" height="44" rx="6" transform="rotate(1.6 412 204)" fill="#FFFFFF"/>
+          <rect x="530" y="82" width="150" height="44" rx="6" transform="rotate(1.2 605 104)" fill="#FFFFFF"/>
+          <rect x="530" y="182" width="150" height="44" rx="6" transform="rotate(-1.4 605 204)" fill="#FFFFFF"/>
+          <path d="M302 146 L344 108" marker-end="url(#a4bAr)"/>
+          <path d="M302 162 L344 198" marker-end="url(#a4bAr)"/>
+          <path d="M476 104 L524 104" marker-end="url(#a4bAr)"/>
+          <path d="M476 204 L524 204" marker-end="url(#a4bAr)"/>
+          <path d="M476 116 L524 190" marker-end="url(#a4bAr)"/>
+          <!-- limits panel -->
+          <rect x="724" y="36" width="140" height="234" rx="8" transform="rotate(0.4 794 153)" fill="#FFFFFF"/>
+        </g>
+
+        <rect x="54" y="200" width="26" height="14" rx="2" fill="#FFFFFF"/>
+        <text class="a4bS" x="56" y="211">file</text>
+        <text class="a4bS" x="30" y="142">time-based</text>
+        <text class="a4bS" x="30" y="250">event-based</text>
+        <text class="a4bS" x="30" y="264">a file arrives</text>
+        <text class="a4bB" x="192" y="63">ONE JOB</text>
+
+        <text class="a4bL" x="202" y="152">ingest</text>
+        <text class="a4bS" x="202" y="168">notebook</text>
+        <text class="a4bL" x="362" y="102">transform A</text>
+        <text class="a4bS" x="362" y="118">Python script</text>
+        <text class="a4bL" x="362" y="202">transform B</text>
+        <text class="a4bS" x="362" y="218">pipeline</text>
+        <text class="a4bL" x="542" y="102">score model</text>
+        <text class="a4bS" x="542" y="118">notebook</text>
+        <text class="a4bL" x="542" y="202">refresh dashboard</text>
+        <text class="a4bS" x="542" y="218">another task type</text>
+
+        <text class="a4bH" x="736" y="60">LIMITS (docs)</text>
+        <text class="a4bV" x="736" y="88">1,000</text>
+        <text class="a4bS" x="736" y="104">tasks per job</text>
+        <text class="a4bV" x="736" y="134">2,000</text>
+        <text class="a4bS" x="736" y="150">concurrent task</text>
+        <text class="a4bS" x="736" y="164">runs / workspace</text>
+        <text class="a4bV" x="736" y="194">12,000</text>
+        <text class="a4bS" x="736" y="210">saved jobs</text>
+        <text class="a4bL" x="736" y="238">Free Edition: 5</text>
+        <text class="a4bS" x="736" y="254">concurrent tasks</text>
+
+        <text class="a4bN" x="30" y="300">Arrows are dependencies: a task waits for every task that points at it. The task names are constructed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - a job is the whole frame: a trigger plus a graph, not a notebook with a timer on it</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Jobs, tasks and triggers<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Three words carry the whole product. A <strong>task</strong> is one unit of work: a notebook, a Python script, a pipeline, and other types the docs list. A <strong>job</strong> is a set of tasks and the dependencies between them, drawn as a DAG. A <strong>trigger</strong> starts the job, and the docs name two families: <strong>time-based</strong> (a schedule) and <strong>event-based</strong> (something happens, such as a file arriving).</p>
+        <p>The documented ceilings tell you the intended scale: a job holds up to 1,000 tasks, a workspace runs up to 2,000 concurrent task runs, and the docs cap saved jobs at 12,000. The useful reading for a leader is the opposite: a single notebook that does ingest, cleaning, scoring and refreshing in one long run is using a 1,000-task tool as a one-task tool, and when it fails you learn only that "the notebook failed".</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Free Edition: 5 concurrent job tasks<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Free Edition limitations page sets a maximum of <strong>5 concurrent job tasks per account</strong>, on serverless compute only, for non-commercial use, with no SLA. Overrun the quota and compute is shut off "for the rest of the day (and in extreme cases, the rest of the month)". That is plenty to learn what a job is, build a three-task graph and watch it run. It is not a place to run a team's real pipelines. Limits change, so re-check that page before you rely on any of them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where orchestration takes over<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Retries, backfills, idempotency, how to cut a pipeline into tasks and how to design dependencies are orchestration questions, and they are the same on Databricks as anywhere else. They live in <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">the data orchestration course</a>; the pipelines that tasks run belong to <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">the data engineering course</a>. This session stays with what Databricks names and what Databricks charges for: jobs, tasks, triggers, and the compute they run on.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>One notebook, four tasks (constructed).</strong> The forecast notebook from Part 1 does four things top to bottom: pull last week's orders, build features, score the model, refresh the planning dashboard. As one notebook, a failure at 3am reads "notebook failed" and someone reruns all of it, including the slow pull. Split into four tasks in one job, the failure reads "score model failed", the orders pull does not run again, and the dashboard task waits instead of showing a half-updated forecast. Same code, cut along its natural seams.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers what changes when code becomes a job</span>
+      <h2>From a person's notebook to a 2am run</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A notebook quietly assumes its author is present: she edits the date, she knows where the file went, she sees the error. A job cannot assume anyone is present. Everything the author used to supply by being there has to be written down before the work is automated.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 318" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before and after. Before, a person's notebook: a hard-coded run date edited by hand, output written to a personal workspace path, run by hand on Monday morning, attached to the shared all-purpose cluster, result visible in a cell only its author sees. After, a job: run date is a parameter set per run, output written to a governed table, a weekly schedule trigger and a named owner, job compute running as a service identity, a failure alert to the owner and a table others can read.">
+        <defs>
+          <filter id="a4cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a4cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a4cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a4cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a4cC { font: 600 11px ui-monospace, Menlo, Consolas, monospace; fill: #9E0B00; }
+          .a4cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a4cH" x="30" y="28">BEFORE · a person's notebook</text>
+        <text class="a4cH" x="470" y="28">AFTER · a job that runs at 2am</text>
+
+        <g filter="url(#a4cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="380" height="230" rx="10" transform="rotate(-0.4 220 155)" fill="#FEF2F2" stroke="#991B1B"/>
+          <rect x="470" y="40" width="380" height="230" rx="10" transform="rotate(0.4 660 155)" fill="#FFF5F3"/>
+          <rect x="50" y="56" width="340" height="30" rx="5" transform="rotate(-0.8 220 71)" fill="#FFFFFF"/>
+          <rect x="50" y="96" width="340" height="30" rx="5" transform="rotate(0.6 220 111)" fill="#FFFFFF"/>
+          <rect x="50" y="136" width="340" height="30" rx="5" transform="rotate(-0.5 220 151)" fill="#FFFFFF"/>
+          <rect x="50" y="176" width="340" height="30" rx="5" transform="rotate(0.7 220 191)" fill="#FFFFFF"/>
+          <rect x="50" y="216" width="340" height="30" rx="5" transform="rotate(-0.6 220 231)" fill="#FFFFFF"/>
+          <rect x="490" y="56" width="340" height="30" rx="5" transform="rotate(0.8 660 71)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="490" y="96" width="340" height="30" rx="5" transform="rotate(-0.6 660 111)" fill="#FFFFFF"/>
+          <rect x="490" y="136" width="340" height="30" rx="5" transform="rotate(0.5 660 151)" fill="#FFFFFF"/>
+          <rect x="490" y="176" width="340" height="30" rx="5" transform="rotate(-0.7 660 191)" fill="#FFFFFF"/>
+          <rect x="490" y="216" width="340" height="30" rx="5" transform="rotate(0.6 660 231)" fill="#FFFFFF"/>
+          <path d="M414 155 L462 155" marker-end="url(#a4cAr)"/>
+          <path d="M838 10 A10 10 0 1 0 850 28 A8 8 0 1 1 838 10 Z" fill="#FFFFFF"/>
+        </g>
+
+        <text class="a4cC" x="62" y="76">run_date = "2026-09-28"  # edit me</text>
+        <text class="a4cC" x="62" y="116">/Workspace/Users/me/out.csv</text>
+        <text class="a4cL" x="62" y="156">run by hand, Monday morning</text>
+        <text class="a4cL" x="62" y="196">on the shared all-purpose cluster</text>
+        <text class="a4cL" x="62" y="236">result in a cell only its author sees</text>
+
+        <text class="a4cS" x="418" y="142">promote</text>
+
+        <text class="a4cB" x="502" y="76">parameter: run_date, set for each run</text>
+        <text class="a4cC" x="502" y="116">writes prod.forecasting.weekly</text>
+        <text class="a4cL" x="502" y="156">weekly schedule trigger, a named owner</text>
+        <text class="a4cL" x="502" y="196">job compute, runs as a service identity</text>
+        <text class="a4cL" x="502" y="236">failure alert to the owner, table for all</text>
+
+        <text class="a4cN" x="30" y="300">Constructed example. The code inside barely changes; everything around it does.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - read across each row: every hand-supplied assumption on the left becomes a written setting on the right</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Parameters, an owner, an identity, a governed output<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Parameters instead of edited cells.</strong> A date someone types into a cell every Monday is a manual step disguised as code. As a job parameter it is set for each run, so last Tuesday can be rerun without anyone touching the notebook, and the run record shows which value was used.</p>
+        <p><strong>An owner and a run identity.</strong> Two different questions: who answers when it breaks, and whose permissions the code uses. A job that runs as its author stops working the day she changes team, and reads whatever she happens to be allowed to read. A job that runs as a service identity reads exactly what was granted to it, which is the grant matrix from session 3 doing its work.</p>
+        <p><strong>Outputs to a governed table.</strong> A CSV in a personal folder is invisible to governance. A Unity Catalog table such as <code>prod.forecasting.weekly</code> has an owner, grants and history, so the people who rely on the forecast can find it and the people who should not see it cannot (<a href="a3-unity-catalog-governance.html">session 3</a>).</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The same cluster, two prices<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Take one cluster of five DS3 v2 machines on Azure Databricks Premium, East US, pay as you go, read 3 October 2026. As all-purpose compute it costs <strong>$3.5275 per hour</strong>; as jobs compute, <strong>$2.59 per hour</strong>. Both include the same $1.465 an hour for the virtual machines; only the DBU part changes. A 2-hour nightly run costs $7.06 on all-purpose and $5.18 on jobs compute, which over 30 nights is $211.65 against $155.40. And if the all-purpose cluster is left on for 14 idle hours a day, those idle hours alone cost $49.39. <a href="a5-what-dbus-cost.html">Session 5</a> shows every step of this arithmetic; AWS and GCP list prices differ.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>When a notebook should stay a notebook<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Not everything should be promoted. Exploration, a one-off analysis for a board question, a prototype model, a data quality investigation: these are interactive by nature, and turning them into jobs adds ceremony with nothing to automate. The test is repetition without a person. If the work will run again on a cadence and someone downstream will rely on the result without watching it run, it is automated work and the checklist applies. If a person reads every result as it appears, leave it a notebook, and make sure its cluster stops when that person goes home.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The forecast notebook, promoted (constructed).</strong> The manager from Part 1 keeps her notebook for exploring. A copy becomes a four-task job: run_date is a parameter, the output goes to a forecasting table the planners already have SELECT on, the job runs as a service identity, it is owned by the analytics lead, and a failure emails the owner. It moves to jobs compute. Using the cluster prices above, a 2-hour nightly run drops from $7.06 to $5.18, and the shared cluster can now shut down at night instead of waiting for her. Your numbers will differ; the shape of the saving will not.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>The promote-a-notebook checklist</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No account and no code. You need one real notebook your team runs by hand, and the person who runs it. By the end you have a one-page checklist that notebook must pass before it is scheduled, and one rule your team agrees to.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A checklist card with nine boxes in four groups. Inputs: parameters, not edited cells; sources by full three-level name. Running: job compute or serverless jobs, highlighted; a named owner; run identity set; schedule or trigger. Outputs: governed table; alert on failure. Cost: expected DBUs, from session 5. Under the card, the team rule: nothing runs on a schedule from an all-purpose cluster.">
+        <defs>
+          <filter id="a4dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="59" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a4dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a4dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a4dH { font: 800 11px Inter, sans-serif; fill: #1B3139; letter-spacing: .04em; }
+          .a4dL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a4dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a4dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a4dW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .a4dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a4dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="16" y="14" width="848" height="190" rx="10" transform="rotate(-0.3 440 109)" fill="#FFFFFF"/>
+          <path d="M230 30 L230 188 M440 30 L440 188 M650 30 L650 188" stroke="#C4CFD3" stroke-dasharray="4 5"/>
+          <!-- inputs -->
+          <rect x="32" y="56" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <rect x="32" y="86" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <!-- running -->
+          <rect x="242" y="56" width="14" height="14" rx="2" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="242" y="86" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <rect x="242" y="116" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <rect x="242" y="146" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <!-- outputs -->
+          <rect x="452" y="56" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <rect x="452" y="86" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <!-- cost -->
+          <rect x="662" y="56" width="14" height="14" rx="2" fill="#FFFFFF"/>
+          <!-- the rule -->
+          <rect x="16" y="222" width="848" height="36" rx="8" transform="rotate(0.3 440 240)" fill="#E00F00" stroke="#9E0B00"/>
+        </g>
+
+        <text class="a4dH" x="32" y="40">INPUTS</text>
+        <text class="a4dH" x="242" y="40">RUNNING</text>
+        <text class="a4dH" x="452" y="40">OUTPUTS</text>
+        <text class="a4dH" x="662" y="40">COST</text>
+
+        <text class="a4dL" x="54" y="68">parameters, not edits</text>
+        <text class="a4dL" x="54" y="98">sources by full name</text>
+        <text class="a4dS" x="54" y="114">catalog.schema.table</text>
+
+        <text class="a4dB" x="264" y="68">job or serverless jobs</text>
+        <text class="a4dL" x="264" y="98">a named owner</text>
+        <text class="a4dL" x="264" y="128">run identity set</text>
+        <text class="a4dL" x="264" y="158">schedule or trigger</text>
+
+        <text class="a4dL" x="474" y="68">governed table</text>
+        <text class="a4dL" x="474" y="98">alert on failure</text>
+
+        <text class="a4dL" x="684" y="68">expected DBUs</text>
+        <text class="a4dS" x="684" y="84">estimated in session 5</text>
+
+        <text class="a4dW" x="34" y="245">Team rule: nothing runs on a schedule from an all-purpose cluster.</text>
+
+        <text class="a4dN" x="16" y="286">Nine boxes in four groups. The amber box is the one that changes the rate on the bill.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - one card per notebook; it is promoted when every box has a written answer, not a tick</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Pick one notebook someone runs by hand every week.</strong> Ask your team which notebook would cause a phone call if it stopped. That is the candidate. Write one line about it.</p>
+        <div class="prompt-box good"><span class="label">★ The candidate, one line</span>Notebook: weekly demand forecast
+Run by: analytics manager, by hand, Monday mornings
+Relied on by: supply planners, every Monday by 10am
+Today it runs on: the shared all-purpose cluster</div>
+      </div>
+      <div class="step">
+        <p><strong>List its inputs.</strong> Every value someone types and every source it reads. Typed values become parameters; sources are written by their full three-level name, so governance can see them.</p>
+        <div class="prompt-box good"><span class="label">★ Inputs</span>Parameters:  run_date (today edited by hand in cell 2)
+             horizon_weeks (today hard-coded as 8)
+Sources:     prod.sales.orders
+             prod.sales.stores
+Personal files read today: one CSV in a home folder -&gt; move to a table first</div>
+      </div>
+      <div class="step">
+        <p><strong>Decide the trigger and the owner.</strong> Time-based or event-based. Then a named person who answers when it fails, and the identity it runs as, which should not be that person.</p>
+        <div class="prompt-box good"><span class="label">★ Trigger, owner, identity</span>Trigger:   time-based, weekly, Sunday 2am
+           (event-based alternative: when the orders load finishes)
+Owner:     analytics lead (named person, has a deputy)
+Runs as:   a service identity with SELECT on prod.sales,
+           write on prod.forecasting, nothing else</div>
+      </div>
+      <div class="step">
+        <p><strong>Decide the compute and the cost line.</strong> Jobs compute or serverless for jobs, never the all-purpose cluster. Write the expected DBUs; session 5 gives you the arithmetic, and for now a rough line is enough.</p>
+        <div class="prompt-box good"><span class="label">★ Compute and cost</span>Compute:   jobs compute, 5 x DS3 v2 (or serverless for jobs)
+Expected:  3.75 DBU per hour x about 2 hours = about 7.5 DBU per run
+At list:   $5.18 per run on jobs vs $7.06 on all-purpose
+           (Azure Premium, East US, pay as you go, 3 Oct 2026;
+            constructed workload, your numbers will differ)</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the checklist.</strong> Nine boxes, four groups, each with a written answer. Copy it into your team's wiki as the template for every future promotion.</p>
+        <div class="prompt-box good"><span class="label">★ The promote-a-notebook checklist</span>INPUTS
+[ ] Every hand-edited value is a job parameter
+[ ] Every source is named catalog.schema.table
+RUNNING
+[ ] Runs on jobs compute or serverless for jobs
+[ ] A named owner (and a deputy)
+[ ] Runs as a service identity, not a person
+[ ] Trigger written down: schedule or event
+OUTPUTS
+[ ] Writes to a governed Unity Catalog table
+[ ] A failure alert reaches the owner
+COST
+[ ] Expected DBUs per run, signed off (session 5)</div>
+      </div>
+      <div class="step">
+        <p><strong>Agree the rule.</strong> One sentence your team signs up to, so the checklist is not optional when someone is in a hurry.</p>
+        <div class="prompt-box good"><span class="label">★ The team rule</span>Nothing runs on a schedule from an all-purpose cluster.
+Interactive work: notebooks, on compute that stops when we leave.
+Automated work: jobs, through this checklist, on jobs compute.</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The promotion that is not one</span>"Just schedule the notebook as-is on the shared cluster,
+it works on my machine."
+(no parameters, no owner, runs as a person, all-purpose rate, output in a home folder)</div>
+
+    <div class="callout tip">
+      <p><strong>The cheapest compute change is often a move, not a cut.</strong> Before anyone negotiates a discount or shrinks a cluster, list every scheduled run and check which compute it is on. Scheduled work sitting on interactive clusters pays the higher rate and keeps those clusters awake; moving it to jobs compute changes the rate without changing a line of code.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 5</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Run the checklist</strong> on the notebook you picked tonight and mark every box that has no written answer yet. Those gaps are the promotion plan.</li>
+      <li><strong>Ask your platform owner for a list of scheduled runs</strong> and the compute each uses. Count how many run on all-purpose clusters.</li>
+      <li><strong>Find one cluster that stays on overnight</strong> and ask who is using it at 2am. If the answer is "nobody", you have found idle hours worth pricing in session 5.</li>
+      <li><strong>Write the team rule</strong> into wherever your team keeps its working agreements, and name who checks it. Bring the list from item 2 to session 5, where we turn it into a monthly estimate.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 4 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · A pipeline refreshes a sales table every night with nobody watching. Which compute fits it?</p>
+      <button class="qopt" type="button">A · The team's shared all-purpose cluster, since it is already running</button>
+      <button class="qopt" type="button">B · A SQL warehouse, because the output is a table</button>
+      <button class="qopt" type="button">C · Jobs compute or serverless for jobs, as a scheduled job</button>
+      <button class="qopt" type="button">D · Whatever cluster the author used when writing the notebook</button>
+      <p class="qwhy">Nightly and unwatched is automated work. The price list itself describes jobs compute as for "Automated workloads", at $0.30 per DBU-hour against $0.55 all-purpose (Azure Premium, East US), and it stops when the run ends.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · On the Free Edition, how many job tasks can run at the same time?</p>
+      <button class="qopt" type="button">A · 5 per account</button>
+      <button class="qopt" type="button">B · 1,000 per job</button>
+      <button class="qopt" type="button">C · 2,000 per workspace</button>
+      <button class="qopt" type="button">D · No limit, because it is serverless</button>
+      <p class="qwhy">The Free Edition limitations page sets a maximum of 5 concurrent job tasks per account. The 1,000 and 2,000 figures are the documented Lakeflow Jobs limits per job and per workspace. Limits change: re-check the page before planning around it.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · What problem do job parameters fix?</p>
+      <button class="qopt" type="button">A · They make the cluster start faster</button>
+      <button class="qopt" type="button">B · They lower the DBU rate</button>
+      <button class="qopt" type="button">C · They replace Unity Catalog grants</button>
+      <button class="qopt" type="button">D · Values such as a run date that someone edits by hand in a cell before each run</button>
+      <p class="qwhy">A hand-edited cell is a manual step disguised as code. As a parameter the value is set for each run, can be changed to rerun a past date, and shows up in the run's record.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Four compute types, serverless plane, the serverless recommendation</span><span class="note">Databricks documentation, "Compute" and the classic compute best practices page, docs.databricks.com, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Jobs, tasks, DAG, triggers, 1,000 tasks, 2,000 concurrent runs, 12,000 saved jobs</span><span class="note">Databricks documentation, "Lakeflow Jobs", docs.databricks.com, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">All-purpose and jobs wording, $0.55 and $0.30 per DBU-hour, cluster prices</span><span class="note">Microsoft, "Azure Databricks pricing" + Azure retail prices API, Premium, East US, pay as you go, read 3 October 2026; AWS and GCP differ</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Free Edition: 5 concurrent job tasks, serverless only, non-commercial</span><span class="note">Databricks Free Edition limitations page, read 3 October 2026; limits change, re-check before use</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The forecast notebook, its four tasks and its checklist answers</span><span class="note">Constructed for teaching</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The one question</b><span>Interactive or automated work, and is it on the compute that matches?</span></div>
+      <div class="cheat-item"><b>Four compute types</b><span>Serverless for notebooks, serverless for jobs, classic compute, SQL warehouses.</span></div>
+      <div class="cheat-item"><b>A job</b><span>A DAG of tasks plus a trigger, time-based or event-based.</span></div>
+      <div class="cheat-item"><b>Documented limits</b><span>1,000 tasks per job; 2,000 concurrent task runs per workspace.</span></div>
+      <div class="cheat-item"><b>Free Edition</b><span>5 concurrent job tasks per account. Enough to learn, not to run a team.</span></div>
+      <div class="cheat-item"><b>Two rates</b><span>$0.55 vs $0.30 per DBU-hour, all-purpose vs jobs (Azure Premium, East US).</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Tonight's two rates, 0.55 versus 0.30, are only half of a bill. Session 5 is what a DBU costs: what a DBU is, why a classic cluster sends two bills, how cluster size and idle hours add up, and a one-page monthly estimate built from your own list of scheduled runs.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 4 of 6 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a3-unity-catalog-governance.html">← Prev: Unity Catalog: who may see what</a> &nbsp;·&nbsp; <a href="a5-what-dbus-cost.html">Next: What a DBU costs →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

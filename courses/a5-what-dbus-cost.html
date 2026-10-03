@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 5 of 6. What a DBU costs: what a Databricks Unit is, why classic compute arrives as two bills, how cluster size, workload type and idle hours add up, and a one-page monthly estimate built from list prices.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="What a DBU costs - learn databricks with phoebe">
+<meta property="og:description" content="Leader session 5 of 6. One meter, two bills, and the idle hours nobody sees. Every number computed from Azure Databricks list prices read 3 October 2026.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/a5-what-dbus-cost.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="What a DBU costs - learn databricks with phoebe">
+<meta name="twitter:description" content="Leader session 5 of 6. Classic compute is two bills, the cloud's and Databricks'. Build a monthly estimate finance can check.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 5 · What a DBU costs - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Leader session 5 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Leader track · Session 5 of 6</div>
+    <h1>What a <span class="accent">DBU</span> costs</h1>
+    <p class="sub">Every Databricks invoice is written in one unit, the DBU, and almost nobody who signs the invoice can say what one is. Tonight we take the unit apart: what it measures, why the same machine has four different prices depending on what you use it for, why a classic cluster sends you two bills from two companies, and where the money actually leaks. You leave with a monthly estimate for three of your own workloads that a finance partner can check line by line.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Data leaders, finance partners, platform owners</span>
+      <span class="chip audience">No code, one calculator</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-19 · One meter, two bills, idle hours</span>
+      <span class="a3" style="flex:5">19-41 · Build-along: your monthly estimate</span>
+      <span class="a4" style="flex:1">41-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Session 4 left you with two rates, $0.55 and $0.30 per DBU-hour, and a rule that nothing scheduled runs on an all-purpose cluster. Tonight turns those rates into money. Every price on this page is an Azure Databricks Premium list price, East US, in US dollars, pay as you go, read on 3 October 2026 from Microsoft's public retail prices API. AWS and GCP list prices differ, and discounts, commitments and taxes are not in any of these numbers. The method carries across clouds; the dollar figures do not.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-page monthly estimate for three of your own workloads, built from list prices and DBU ratings with every multiplication shown, and the sentence that explains half of every surprise on a Databricks invoice: "classic compute is two bills, the cloud's and Databricks'."</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers what a DBU is</span>
+      <h2>A unit of processing, billed per second</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A DBU is a meter reading, not a machine. Each machine type is rated at so many DBUs per hour; multiply by how many machines and how long they run, and you have DBUs. Then a price per DBU, chosen by the kind of work, turns the reading into dollars. Four numbers, multiplied.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The DBU meter as four boxes multiplied. One DS3 v2 node, 4 vCPU and 14 GiB, is rated 0.75 DBU per hour; times 5 nodes, 1 driver and 4 workers; times hours running, billed by the second; times a price per DBU that depends on the workload type, from $0.22 to $0.95. The price card, Azure Premium East US: all-purpose classic $0.55, jobs classic $0.30, SQL classic $0.22, SQL Pro $0.55, serverless SQL $0.70, interactive serverless $0.95, automated serverless $0.45, jobs light $0.22. A side panel: with Photon on, the same node is rated 1.50 DBU per hour on all-purpose and 1.88 on jobs.">
+        <defs>
+          <filter id="a5aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="61" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a5aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a5aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a5aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a5aV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .a5aC { font: 600 11px ui-monospace, Menlo, Consolas, monospace; fill: #9E0B00; }
+          .a5aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a5aH" x="30" y="26">THE METER: FOUR NUMBERS, MULTIPLIED</text>
+
+        <g filter="url(#a5aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="180" height="82" rx="8" transform="rotate(-1 120 81)" fill="#FFFFFF"/>
+          <rect x="240" y="40" width="150" height="82" rx="8" transform="rotate(1 315 81)" fill="#FFFFFF"/>
+          <rect x="420" y="40" width="150" height="82" rx="8" transform="rotate(-1 495 81)" fill="#FFFFFF"/>
+          <rect x="600" y="40" width="250" height="82" rx="8" transform="rotate(0.8 725 81)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M725 128 L725 146" marker-end="url(#a5aAr)"/>
+          <rect x="420" y="150" width="430" height="118" rx="8" transform="rotate(-0.3 635 209)" fill="#FFF5F3"/>
+          <rect x="30" y="150" width="370" height="118" rx="8" transform="rotate(0.3 215 209)" fill="#FFFFFF"/>
+          <!-- doodle: a dial whose needle swings further with Photon -->
+          <path d="M341 222 A24 24 0 0 1 389 222"/>
+          <path d="M365 222 L380 204"/>
+          <path d="M365 222 L352 205" stroke="#C4CFD3" stroke-dasharray="3 3"/>
+        </g>
+
+        <text class="a5aL" x="42" y="64">one DS3 v2 node</text>
+        <text class="a5aV" x="42" y="92">0.75 DBU/h</text>
+        <text class="a5aS" x="42" y="112">4 vCPU, 14 GiB</text>
+        <text class="a5aV" x="219" y="90">×</text>
+
+        <text class="a5aL" x="252" y="64">nodes in cluster</text>
+        <text class="a5aV" x="252" y="92">5</text>
+        <text class="a5aS" x="252" y="112">1 driver + 4 workers</text>
+        <text class="a5aV" x="399" y="90">×</text>
+
+        <text class="a5aL" x="432" y="64">hours running</text>
+        <text class="a5aV" x="432" y="92">hours</text>
+        <text class="a5aS" x="432" y="112">billed by the second</text>
+        <text class="a5aV" x="579" y="90">×</text>
+
+        <text class="a5aB" x="612" y="64">$ PER DBU, BY WORKLOAD TYPE</text>
+        <text class="a5aH" x="612" y="90">$0.22 to $0.95</text>
+        <text class="a5aB" x="612" y="110">same machine, different price</text>
+
+        <text class="a5aH" x="436" y="174">AZURE PREMIUM, EAST US, $ PER DBU-HOUR</text>
+        <text class="a5aS" x="436" y="198">all-purpose classic</text>
+        <text class="a5aC" x="590" y="198">$0.55</text>
+        <text class="a5aS" x="436" y="218">jobs classic</text>
+        <text class="a5aC" x="590" y="218">$0.30</text>
+        <text class="a5aS" x="436" y="238">SQL classic</text>
+        <text class="a5aC" x="590" y="238">$0.22</text>
+        <text class="a5aS" x="436" y="258">SQL Pro</text>
+        <text class="a5aC" x="590" y="258">$0.55</text>
+        <text class="a5aS" x="650" y="198">serverless SQL</text>
+        <text class="a5aC" x="806" y="198">$0.70</text>
+        <text class="a5aS" x="650" y="218">interactive serverless</text>
+        <text class="a5aC" x="806" y="218">$0.95</text>
+        <text class="a5aS" x="650" y="238">automated serverless</text>
+        <text class="a5aC" x="806" y="238">$0.45</text>
+        <text class="a5aS" x="650" y="258">jobs light</text>
+        <text class="a5aC" x="806" y="258">$0.22</text>
+
+        <text class="a5aH" x="46" y="174">PHOTON ON, SAME DS3 V2 NODE</text>
+        <text class="a5aL" x="46" y="200">all-purpose: 0.75 → 1.50 DBU/h</text>
+        <text class="a5aL" x="46" y="222">jobs: 0.75 → 1.88 DBU/h</text>
+        <text class="a5aS" x="46" y="244">more DBUs per hour; it pays only if the run</text>
+        <text class="a5aS" x="46" y="260">gets enough faster. Measure your own job.</text>
+
+        <text class="a5aN" x="30" y="290">Azure Databricks Premium, East US, pay as you go, read 3 Oct 2026. AWS and GCP list prices differ.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the machine sets the DBUs, the workload type sets the price; the amber box is where the same hour becomes four different bills</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What a DBU is, in the vendors' own words<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks' pricing page defines it as "a normalized unit of processing power" that is "used for measurement and pricing purposes", metered at "per second granularity". Microsoft's Azure Databricks pricing page says the same thing in its own words: "A DBU is a unit of processing capability, billed on a per-second usage", and "The DBU consumption depends on the size and type of instance".</p>
+        <p>Read those two sentences as a leader. "Normalized" means Databricks, not you, decides how many DBUs a machine is worth; the rating table is part of the price list. "Per second" means a cluster that runs 61 minutes is billed for 61 minutes, not two hours, and also that every idle second counts. For the most common teaching machine on Azure, the DS3 v2 with 4 vCPU and 14 GiB, the rating is 0.75 DBU per hour on both all-purpose and jobs compute.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Same machine, different price; Photon changes the count<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The DBU count follows the machine. The price per DBU follows the kind of work. A DS3 v2 running someone's interactive notebook on an all-purpose cluster is billed at $0.55 per DBU-hour; the identical machine running a scheduled job on jobs compute is billed at $0.30. A classic SQL warehouse is $0.22, SQL Pro $0.55, serverless SQL $0.70, interactive serverless $0.95, automated serverless $0.45. All-purpose costs 1.83 times what jobs compute costs for the same DBUs, which is why session 4 made "no schedules on all-purpose" a team rule.</p>
+        <p>Photon, Databricks' faster query engine, does not change the price per DBU; it changes the rating. The Azure page lists the DS3 v2 at 1.50 DBU per hour on all-purpose with Photon and 1.88 on jobs with Photon, against 0.75 without. Whether that is a saving depends entirely on how much faster your job finishes, and that is a measurement, not a setting.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where the AWS and GCP numbers stand<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks publishes its AWS and GCP price tables on databricks.com, but those tables load by script and could not be read at source for this session. Secondary pricing guides (eesel.ai and cloudforecast.io, 2026) report about $0.15 per DBU for jobs and $0.55 for all-purpose on AWS. Treat both as reported, not verified. If your platform is on AWS or GCP, rebuild tonight's estimate from your own cloud's price page on the day you use it; the four-number method does not change.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The switch that doubled the meter (constructed).</strong> A team turns Photon on for its 5-node DS3 v2 all-purpose cluster because a blog post said it was faster. The cluster's rating goes from 5 × 0.75 = 3.75 DBU per hour to 5 × 1.50 = 7.5. At $0.55 the DBU line goes from $2.0625 an hour to $4.125. Nobody measured whether the notebooks got faster. The right move was not to forbid Photon; it was to time one representative job both ways and let the DBUs per run, not the DBUs per hour, decide.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the two bills</span>
+      <h2>Classic compute is two bills</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">On classic compute the machines live in your own cloud subscription. Microsoft bills you for the virtual machines; Databricks bills you for the DBUs those machines consume. Two invoices, often two cost centres, one cluster. Here is one hour of the same 5-node DS3 v2 cluster, priced both ways.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 272" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two stacked bars for one hour of a 5-node DS3 v2 cluster on classic compute. All-purpose: DBUs $2.0625 on the Databricks bill plus VMs $1.465 on the Azure bill, total $3.5275. Jobs: DBUs $1.125 plus the same VMs $1.465, total $2.59. The VM part is identical; the whole difference of $0.9375 per hour is in the DBU line. Serverless runs in the serverless plane managed by Databricks and is priced per DBU, for example a 2X-Small SQL warehouse at $2.80 per hour.">
+        <defs>
+          <filter id="a5bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a5bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a5bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a5bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a5bW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .a5bV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .a5bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a5bH" x="30" y="26">ONE HOUR, 5 x DS3 V2, CLASSIC COMPUTE</text>
+        <text class="a5bS" x="186" y="44">Databricks bill</text>
+        <text class="a5bS" x="516" y="44">cloud bill (your Azure subscription)</text>
+
+        <g filter="url(#a5bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="180" y="52" width="330" height="48" rx="6" transform="rotate(-0.4 345 76)" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="512" y="52" width="234" height="48" rx="6" transform="rotate(0.4 629 76)" fill="#FFFFFF"/>
+          <rect x="180" y="128" width="180" height="48" rx="6" transform="rotate(0.4 270 152)" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="362" y="128" width="234" height="48" rx="6" transform="rotate(-0.4 479 152)" fill="#FFFFFF"/>
+          <path d="M512 104 L364 124" stroke="#C4CFD3" stroke-dasharray="4 4"/>
+          <rect x="180" y="198" width="420" height="30" rx="6" transform="rotate(0.5 390 213)" fill="#FFAB00" stroke="#4D3200"/>
+          <!-- doodle: two receipts, side by side -->
+          <path d="M784 196 L816 196 L816 238 L808 233 L800 238 L792 233 L784 238 Z" fill="#FFFFFF"/>
+          <path d="M790 206 L810 206 M790 214 L810 214 M790 222 L804 222"/>
+          <path d="M826 196 L858 196 L858 238 L850 233 L842 238 L834 233 L826 238 Z" fill="#FFF5F3"/>
+          <path d="M832 206 L852 206 M832 214 L852 214 M832 222 L846 222"/>
+        </g>
+
+        <text class="a5bL" x="30" y="74">all-purpose</text>
+        <text class="a5bS" x="30" y="92">$0.55 per DBU</text>
+        <text class="a5bW" x="194" y="81">DBUs 3.75 × $0.55 = $2.0625</text>
+        <text class="a5bL" x="526" y="81">VMs 5 × $0.293 = $1.465</text>
+        <text class="a5bV" x="760" y="84">$3.5275</text>
+
+        <text class="a5bL" x="30" y="150">jobs</text>
+        <text class="a5bS" x="30" y="168">$0.30 per DBU</text>
+        <text class="a5bW" x="192" y="157">DBUs $1.125</text>
+        <text class="a5bL" x="376" y="157">VMs 5 × $0.293 = $1.465</text>
+        <text class="a5bV" x="610" y="160">$2.59</text>
+
+        <text class="a5bB" x="192" y="218">only the DBU line moves: $0.9375 an hour less on jobs</text>
+
+        <text class="a5bN" x="30" y="260">Serverless runs in the serverless plane managed by Databricks, priced per DBU (SQL 2X-Small: $2.80/h).</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the white VM block is the same length in both rows; the workload type only changes the red one</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Two invoices, in Azure's words<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Microsoft states it plainly: "Azure Databricks bills you for virtual machines (VMs) provisioned in clusters and Databricks Units (DBUs) based on the VM instance selected." A DS3 v2 Linux VM in East US lists at $0.293 per hour in the Azure retail prices API. Five of them cost $1.465 an hour whatever they are doing. On top of that sit the DBUs: 3.75 an hour for five nodes, priced at $0.55 on all-purpose ($2.0625) or $0.30 on jobs ($1.125). Total: $3.5275 an hour or $2.59 an hour.</p>
+        <p>Notice what does not move. The VM line is identical in both rows, because the machines are identical. The workload type only reprices the Databricks half. That is the reason a finance partner reading only the Databricks invoice will underestimate classic compute, and a cloud team reading only the Azure invoice will not see why the Databricks one doubled.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Serverless: one price, Databricks' machines<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Serverless compute runs "in the serverless compute plane, which is managed by Databricks", not in your subscription, and is priced per DBU at its own rates. A serverless SQL warehouse is sized in DBUs per hour on the Azure page: 2X-Small 4, X-Small 6, Small 12, Medium 24, Large 40, X-Large 80, 2X-Large 144, 3X-Large 272, 4X-Large 528. The smallest, at 4 DBU per hour × $0.70, lists at $2.80 an hour.</p>
+        <p>Databricks' classic compute best-practices page says "For most new workloads, Databricks recommends using serverless compute." Note who is recommending. Serverless removes the second bill and the idle machines you forget, and it carries a higher price per DBU. Whether it is cheaper for you depends on how much of your classic cluster time is idle, which is Part 3.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The cloud side of the bill<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Tonight covers the Databricks side: DBUs and the VMs that classic clusters add. The rest of the cloud bill, storage for the Delta files, network egress, reserved capacity and how to read a cloud invoice, belongs to the cloud itself and is covered in <a href="https://phoebefu6.github.io/learn-aws-with-phoebe/">Learn AWS with Phoebe</a>. Storage for a lakehouse is real money too; it is simply not metered in DBUs.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The half of the bill nobody owned (constructed).</strong> A finance partner reconciles the monthly Databricks invoice against the platform team's budget and finds it on target. Three months later the cloud team asks why the Azure subscription that hosts the data platform is over budget. Both teams were right about their own invoice. The VM lines for every classic cluster sat in the Azure bill, under a cost centre nobody connected to Databricks. The fix was one sentence in the budget template: classic compute is two bills, and both lines are owned by the same person.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers where money leaks</span>
+      <h2>Idle is the expensive part</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Per-second billing cuts both ways. A two-hour job costs two hours. A cluster that nobody is using, left running overnight, also costs every second it stays up. Here is one constructed day for the same 5-node DS3 v2 cluster.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 262" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A 24-hour strip with three rows. Row one: a 2-hour nightly job on jobs compute, $5.18 a night, $155.40 over 30 nights. Row two: the same job on an all-purpose cluster, $7.06 a night, $211.65 over 30 nights. Row three: an analysts' all-purpose cluster used from 08:00 to 18:00 and left on with nobody using it from 18:00 to 08:00, 14 idle hours, highlighted. 14 idle hours times $3.5275 is $49.39 a night.">
+        <defs>
+          <filter id="a5cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a5cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a5cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a5cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a5cV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .a5cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a5cH" x="30" y="26">ONE CONSTRUCTED DAY, 5 x DS3 V2</text>
+        <text class="a5cS" x="170" y="54" text-anchor="middle">00:00</text>
+        <text class="a5cS" x="338" y="54" text-anchor="middle">06:00</text>
+        <text class="a5cS" x="506" y="54" text-anchor="middle">12:00</text>
+        <text class="a5cS" x="674" y="54" text-anchor="middle">18:00</text>
+        <text class="a5cS" x="842" y="54" text-anchor="middle">24:00</text>
+
+        <g filter="url(#a5cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- doodle: a crescent moon for the night -->
+          <path d="M100 38 A11 11 0 1 0 112 54 A8 8 0 1 1 100 38 Z" fill="#FFFFFF"/>
+          <!-- row 1: jobs compute -->
+          <rect x="170" y="64" width="672" height="34" rx="6" transform="rotate(-0.2 506 81)" fill="#FFFFFF" stroke="#C4CFD3"/>
+          <rect x="198" y="64" width="56" height="34" rx="4" transform="rotate(-1 226 81)" fill="#B80C00" stroke="#9E0B00"/>
+          <!-- row 2: same job on all-purpose -->
+          <rect x="170" y="112" width="672" height="34" rx="6" transform="rotate(0.2 506 129)" fill="#FFFFFF" stroke="#C4CFD3"/>
+          <rect x="198" y="112" width="56" height="34" rx="4" transform="rotate(1 226 129)" fill="#E00F00" stroke="#9E0B00"/>
+          <!-- row 3: analysts' cluster left on -->
+          <rect x="170" y="160" width="222" height="34" rx="4" transform="rotate(-0.6 281 177)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="396" y="160" width="276" height="34" rx="4" transform="rotate(0.4 534 177)" fill="#FFF5F3"/>
+          <rect x="676" y="160" width="166" height="34" rx="4" transform="rotate(-0.6 759 177)" fill="#FFAB00" stroke="#4D3200"/>
+        </g>
+
+        <text class="a5cL" x="30" y="78">nightly job</text>
+        <text class="a5cS" x="30" y="93">jobs compute</text>
+        <text class="a5cL" x="270" y="86">2 h · $5.18 a night · $155.40 over 30 nights</text>
+
+        <text class="a5cL" x="30" y="126">nightly job</text>
+        <text class="a5cS" x="30" y="141">all-purpose</text>
+        <text class="a5cL" x="270" y="134">2 h · $7.06 a night · $211.65 over 30 nights</text>
+
+        <text class="a5cL" x="30" y="174">analysts' cluster</text>
+        <text class="a5cS" x="30" y="189">all-purpose, no stop</text>
+        <text class="a5cB" x="184" y="181">idle 8 h</text>
+        <text class="a5cL" x="410" y="181">in use, 08:00 to 18:00</text>
+        <text class="a5cB" x="690" y="181">idle 6 h</text>
+
+        <text class="a5cV" x="170" y="226">14 idle h × $3.5275 = $49.39</text>
+        <text class="a5cS" x="470" y="224">a night, every night it is left on</text>
+
+        <text class="a5cN" x="30" y="250">Constructed day at list prices (Azure Premium, East US). Auto-termination removes the amber.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the job is the small red block; the money is in the amber hours when nobody is there</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Turn idle off<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks' classic compute best-practices page is direct: "Enable auto termination to ensure compute is terminated after a period of inactivity." An all-purpose 5-node DS3 v2 cluster that sits idle for 14 hours overnight costs 14 × $3.5275 = $49.39, against $7.06 for the two-hour job that actually needed it. The job is not the expensive part. The hours nobody is watching are.</p>
+        <p>Jobs compute ends with the job by design: the cluster starts for the run and stops when the run finishes. Serverless removes idle machines from your side of the ledger. The cluster most at risk is the shared all-purpose one that analysts start at 8am and nobody owns at 6pm.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The 1.83 ratio, over a month<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>All-purpose DBUs cost 1.83 times jobs DBUs ($0.55 against $0.30). Once the VMs are added the gap narrows to $3.5275 against $2.59 an hour, because the VMs cost the same either way. Over 30 nights the same 2-hour job costs $211.65 on all-purpose and $155.40 on jobs compute. That is the money session 4's promote-a-notebook checklist saves, and it is the smaller leak: one idle night of the analysts' cluster costs almost as much as that whole monthly difference.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Free Edition: no bill, but a quota<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks Free Edition is free, for non-commercial use, and serverless only: no custom compute, and one SQL warehouse limited to 2X-Small. It has no invoice to estimate, but it has a quota. The limitations page says an overrun shuts compute down "for the rest of the day (and in extreme cases, the rest of the month)". The habit is the same one that saves money on a paid workspace: stop what you are not using. Limits change, so re-read the Free Edition limitations page before relying on any of them.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The long weekend (constructed).</strong> An analyst starts the team's 5-node DS3 v2 all-purpose cluster on Friday afternoon, runs one last query at 6pm, and goes home for a long weekend. Auto-termination was switched off months ago because "it kept killing my session". The cluster runs until someone notices on Monday at 6pm: 72 idle hours × $3.5275 = $253.98 at list price, for no work at all. The fix was not a reprimand. It was turning auto-termination back on as a workspace policy and making the short restart the accepted cost of a shared cluster.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Your monthly estimate</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No account and no code: a calculator and three workloads your team actually runs. The example below uses constructed workloads at the list prices above, so every line can be checked; your numbers will differ. Keep every multiplication on the page. An estimate whose arithmetic finance cannot follow will be replaced by one they can.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An estimate sheet with three rows and four columns. Nightly ETL job on jobs compute, 60 hours: DBUs 5 times 0.75 times 60 times $0.30 equals 225 DBU, $67.50; VMs 5 times $0.293 times 60 equals $87.90; monthly $155.40. Analysts' cluster on all-purpose, 176 hours: 5 times 0.75 times 176 times $0.55 equals 660 DBU, $363.00; VMs 5 times $0.293 times 176 equals $257.84; monthly $620.84. BI warehouse, serverless SQL 2X-Small, 176 hours: 4 times 176 times $0.70 equals 704 DBU, $492.80; no VM line; monthly $492.80. Total a month at list price, highlighted: $1,269.04.">
+        <defs>
+          <filter id="a5dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="73" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a5dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a5dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a5dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a5dL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a5dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a5dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a5dV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .a5dC { font: 600 11px ui-monospace, Menlo, Consolas, monospace; fill: #9E0B00; }
+          .a5dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a5dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="20" y="24" width="840" height="176" rx="8" transform="rotate(-0.2 440 112)" fill="#FFFFFF"/>
+          <path d="M22 60 L858 60" stroke="#C4CFD3"/>
+          <path d="M22 106 L858 106 M22 152 L858 152" stroke="#E2E8EA"/>
+          <path d="M230 26 L230 198 M470 26 L470 198 M670 26 L670 198" stroke="#C4CFD3" stroke-dasharray="4 5"/>
+          <rect x="470" y="212" width="380" height="36" rx="6" transform="rotate(0.5 660 230)" fill="#FFAB00" stroke="#4D3200"/>
+          <!-- doodle: a pencil -->
+          <path d="M392 244 L438 216 L446 224 L400 252 Z" fill="#FFFFFF"/>
+          <path d="M392 244 L388 256 L400 252"/>
+        </g>
+
+        <text class="a5dH" x="36" y="47">WORKLOAD</text>
+        <text class="a5dH" x="242" y="47">DBU LINE</text>
+        <text class="a5dH" x="482" y="47">VM LINE (classic only)</text>
+        <text class="a5dH" x="682" y="47">MONTHLY</text>
+
+        <text class="a5dL" x="36" y="80">nightly ETL job</text>
+        <text class="a5dS" x="36" y="96">jobs compute, 60 h</text>
+        <text class="a5dC" x="242" y="80">5 x 0.75 x 60 x $0.30</text>
+        <text class="a5dS" x="242" y="96">= 225 DBU = $67.50</text>
+        <text class="a5dC" x="482" y="80">5 x $0.293 x 60</text>
+        <text class="a5dS" x="482" y="96">= $87.90</text>
+        <text class="a5dV" x="682" y="90">$155.40</text>
+
+        <text class="a5dL" x="36" y="126">analysts' cluster</text>
+        <text class="a5dS" x="36" y="142">all-purpose, 176 h</text>
+        <text class="a5dC" x="242" y="126">5 x 0.75 x 176 x $0.55</text>
+        <text class="a5dS" x="242" y="142">= 660 DBU = $363.00</text>
+        <text class="a5dC" x="482" y="126">5 x $0.293 x 176</text>
+        <text class="a5dS" x="482" y="142">= $257.84</text>
+        <text class="a5dV" x="682" y="136">$620.84</text>
+
+        <text class="a5dL" x="36" y="172">BI warehouse</text>
+        <text class="a5dS" x="36" y="188">serverless SQL, 176 h</text>
+        <text class="a5dC" x="242" y="172">4 x 176 x $0.70</text>
+        <text class="a5dS" x="242" y="188">= 704 DBU = $492.80</text>
+        <text class="a5dS" x="482" y="172">none: serverless plane</text>
+        <text class="a5dV" x="682" y="182">$492.80</text>
+
+        <text class="a5dS" x="30" y="234">Rows 1 and 2 are classic: two bills. Row 3 is one.</text>
+        <text class="a5dB" x="484" y="235">TOTAL A MONTH, AT LIST PRICE</text>
+        <text class="a5dH" x="760" y="235">$1,269.04</text>
+
+        <text class="a5dN" x="30" y="270">Constructed workloads at list prices, Azure Premium, East US, 3 Oct 2026. Your numbers will differ.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - every cell is a multiplication finance can redo; the amber total is the number you take to session 6</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>List three workloads with their hours per month.</strong> One scheduled job, one interactive cluster, one SQL warehouse that serves dashboards. For each, write the compute type, the machine and node count, and the hours it actually runs in a month, not the hours someone is working.</p>
+        <div class="prompt-box good"><span class="label">★ Three workloads, hours a month</span>Workload            Compute                        Hours a month
+nightly ETL job     jobs compute, 5 x DS3 v2       2 h x 30 nights = 60
+analysts' cluster   all-purpose, 5 x DS3 v2        8 h x 22 days   = 176
+BI warehouse        serverless SQL, 2X-Small       8 h x 22 days   = 176
+(constructed workloads; your numbers will differ)</div>
+      </div>
+      <div class="step">
+        <p><strong>Price the nightly job on jobs compute.</strong> DBUs first: nodes × rating × hours, then times the jobs rate. Then the VMs: nodes × VM price × hours. Add the two bills.</p>
+        <div class="prompt-box good"><span class="label">★ Nightly ETL job, jobs compute</span>DBUs:   5 nodes x 0.75 DBU/h x 60 h   = 225 DBU
+        225 DBU x $0.30                = $67.50   (Databricks bill)
+VMs:    5 x $0.293 x 60 h              = $87.90   (Azure bill)
+Month:  $67.50 + $87.90                = $155.40</div>
+      </div>
+      <div class="step">
+        <p><strong>Price the same job on all-purpose, then the analysts' cluster.</strong> Same DBUs, same VMs, a different rate. Write the difference down; it is the case for session 4's rule. The analysts' cluster is all-purpose by nature, so the line to protect is its hours.</p>
+        <div class="prompt-box good"><span class="label">★ All-purpose: the job, then the analysts' cluster</span>Nightly job on all-purpose:
+  225 DBU x $0.55 = $123.75  +  VMs $87.90  = $211.65
+  difference vs jobs compute: $211.65 - $155.40 = $56.25 a month
+
+Analysts' cluster, all-purpose, 176 h:
+  DBUs:  5 x 0.75 x 176 = 660 DBU x $0.55   = $363.00
+  VMs:   5 x $0.293 x 176                    = $257.84
+  Month: $363.00 + $257.84                   = $620.84
+  (assumes auto-termination: 176 h, not 720 h)</div>
+      </div>
+      <div class="step">
+        <p><strong>Price the BI warehouse on serverless SQL.</strong> A 2X-Small serverless SQL warehouse is 4 DBU per hour. On for 8 hours a day, 22 days a month. There is no VM line: the machines run in the serverless plane that Databricks manages.</p>
+        <div class="prompt-box good"><span class="label">★ BI warehouse, serverless SQL 2X-Small</span>DBUs:   4 DBU/h x 8 h x 22 days = 704 DBU
+        704 DBU x $0.70          = $492.80
+VMs:    none in your subscription
+Month:                            $492.80
+(list price arithmetic; your numbers will differ)</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the summary for finance.</strong> One total, three lines, the price source and date, and what is not included. This is the paragraph that goes into the budget request and the one you bring to session 6.</p>
+        <div class="prompt-box good"><span class="label">★ The note for finance</span>Monthly Databricks compute estimate: $1,269.04 at list price
+(Azure Databricks Premium, East US, USD, pay as you go, read 3 Oct 2026)
+
+  nightly ETL job     $155.40   jobs compute ($211.65 if run on all-purpose)
+  analysts' cluster   $620.84   all-purpose, auto-termination on
+  BI warehouse        $492.80   serverless SQL, 2X-Small
+
+Classic compute is two bills, the cloud's and Databricks'.
+$345.74 of this total arrives on the Azure invoice, not the Databricks one.
+Not included: storage, network egress, discounts or commitments, taxes.
+AWS and GCP list prices differ; re-price before any other cloud.</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The estimate finance cannot check</span>Estimate = number of users x a per-seat price
+(Databricks does not bill per seat; it bills DBUs for machines that run,
+and on classic compute the machines bill separately. A seat count says
+nothing about how many hours a cluster is left on.)</div>
+
+    <div class="callout tip">
+      <p><strong>Re-read the price list on the day you estimate.</strong> DBU rates, machine ratings and product names change, and a budget built on last quarter's price page is wrong in ways nobody will spot until the invoice arrives. Write the date and the source on the estimate itself, as above.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 6</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Replace the constructed rows with your own.</strong> Pull last month's run hours for one job, one all-purpose cluster and one SQL warehouse, and redo the five steps with your cloud's current list prices.</li>
+      <li><strong>Find the second bill.</strong> In your cloud invoice, find the VM lines that belong to Databricks classic clusters, and write down which cost centre they land in and who owns it.</li>
+      <li><strong>Check every all-purpose cluster for auto-termination.</strong> List any that have it off, and for each one the reason someone gave. Price one idle night for the largest of them.</li>
+      <li><strong>Find one scheduled run on all-purpose compute.</strong> Price it both ways as in step 3, and put it through session 4's promote-a-notebook checklist.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 5 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · The same 5-node DS3 v2 cluster costs $3.53 an hour as all-purpose compute and $2.59 as jobs compute. Why?</p>
+      <button class="qopt" type="button">A · Azure charges more for VMs used interactively</button>
+      <button class="qopt" type="button">B · Jobs clusters quietly use fewer nodes</button>
+      <button class="qopt" type="button">C · The price per DBU differs by workload type, $0.55 against $0.30; the VM cost, $1.465 an hour, is the same in both</button>
+      <button class="qopt" type="button">D · Jobs compute is billed by the hour and all-purpose by the second</button>
+      <p class="qwhy">Same machines, same DBU rating, same VM line. Only the Databricks rate changes with the kind of work: 3.75 DBU × $0.55 = $2.0625 against 3.75 × $0.30 = $1.125, each plus $1.465 of VMs.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · What does turning Photon on do to the DBU count of a DS3 v2 node?</p>
+      <button class="qopt" type="button">A · Raises it: from 0.75 to 1.50 DBU per hour on all-purpose, and to 1.88 on jobs</button>
+      <button class="qopt" type="button">B · Halves it, because queries run faster</button>
+      <button class="qopt" type="button">C · Leaves it alone and changes only the VM price</button>
+      <button class="qopt" type="button">D · Removes DBUs and bills by query instead</button>
+      <p class="qwhy">Photon raises the rating per hour. It can still cost less per run if the run finishes fast enough, which is why the decision belongs to a timed test on your own job, not to a default.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · A 5-node DS3 v2 all-purpose cluster is left on with nobody using it for 14 hours overnight. At the list rates above, what does that cost?</p>
+      <button class="qopt" type="button">A · Nothing: an idle cluster is not billed</button>
+      <button class="qopt" type="button">B · $7.06, the price of one nightly job</button>
+      <button class="qopt" type="button">C · $0.55, one DBU-hour</button>
+      <button class="qopt" type="button">D · $49.39: 14 hours × $3.5275, DBUs and VMs</button>
+      <p class="qwhy">A running cluster is billed every second it is up, whether or not anyone is using it. Auto-termination is the cheapest control on the platform.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">What a DBU is, per-second billing</span><span class="note">Databricks, "Pricing" (databricks.com/product/pricing), read at source 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Two bills, DS3 v2 rating 0.75, Photon ratings 1.50 and 1.88, warehouse sizes</span><span class="note">Microsoft, "Azure Databricks pricing", read at source 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every rate and the DS3 v2 VM price, $0.293 an hour</span><span class="note">Azure retail prices API, Azure Databricks Premium, East US, USD, pay as you go, read 3 October 2026; the arithmetic was run and its output saved</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Serverless plane, the serverless recommendation, auto-termination, Free Edition quota</span><span class="note">Databricks documentation, docs.databricks.com (compute, classic compute best practices, Free Edition limitations), read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">AWS rates: about $0.15 jobs, $0.55 all-purpose</span><span class="note">Reported by secondary pricing guides (eesel.ai, cloudforecast.io, 2026); databricks.com price tables could not be read</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Photon switch, the half-owned bill, the long weekend, the three workloads</span><span class="note">Constructed for teaching, priced only with the list rates above</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The meter</b><span>DBU/h per node × nodes × hours × $ per DBU. Billed per second.</span></div>
+      <div class="cheat-item"><b>Two bills</b><span>Classic compute = DBUs to Databricks + VMs to your cloud. Serverless = DBUs only.</span></div>
+      <div class="cheat-item"><b>Two rates</b><span>All-purpose $0.55, jobs $0.30 per DBU-hour (Azure Premium, East US, 3 Oct 2026; AWS and GCP differ).</span></div>
+      <div class="cheat-item"><b>One cluster-hour</b><span>5 × DS3 v2: $3.53 all-purpose, $2.59 jobs. The VMs, $1.465, are the same in both.</span></div>
+      <div class="cheat-item"><b>Smallest warehouse</b><span>Serverless SQL 2X-Small: 4 DBU/h × $0.70 = $2.80 an hour.</span></div>
+      <div class="cheat-item"><b>Turn idle off</b><span>14 idle hours on all-purpose = $49.39. Auto-termination on, everywhere.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Session 6 is the decision: lakehouse or warehouse? Bring two things you have already made, the copy map from session 1 and tonight's monthly estimate. Together they turn a vendor argument into your own numbers: how many copies you keep, how stale they are, and what it costs to run the work.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 5 of 6 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a4-notebooks-vs-jobs.html">← Prev: Notebooks versus jobs</a> &nbsp;·&nbsp; <a href="a6-lakehouse-or-warehouse.html">Next: Lakehouse or warehouse? →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

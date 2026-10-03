@@ -1,0 +1,5 @@
+rows: 2964606
+31 daily appends       JFK: 31/31 files, 100.0% of bytes | 15 Jan: 1/31 files, 2.7% of bytes
+OPTIMIZE (compact)     JFK: 8/8 files, 100.0% of bytes | 15 Jan: 1/8 files, 12.9% of bytes
+ZORDER BY (pu_zone)    JFK: 1/6 files, 17.9% of bytes | 15 Jan: 6/6 files, 100.0% of bytes
+JFK trips: 145240

@@ -1,0 +1,11 @@
+VERSION AS OF 0: 21617 rows
+VERSION AS OF 1: 77033 rows
+VERSION AS OF 2: 76103 rows
+history: 2 DELETE {'predicate': 'fare_amount < 0'}
+history: 1 WRITE {'mode': 'Append'}
+history: 0 WRITE {'mode': 'ErrorIfExists'}
+after RESTORE: version 3 rows 77033
+vacuum dry run, default retention: 0 files
+vacuum with retention 0 deleted: 1 files
+time travel to version 2 now fails: FileNotFoundError
+latest still reads: 77033 rows

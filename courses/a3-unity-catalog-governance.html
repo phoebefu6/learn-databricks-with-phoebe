@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 3 of 6. Unity Catalog, read from the Databricks privileges reference: one tree for tables, volumes and models, the three keys a reader needs, grants that flow down to tables nobody has created yet, and who may hand out access when the owner is away.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Unity Catalog: who may see what - learn databricks with phoebe">
+<meta property="og:description" content="Leader session 3 of 6. Three keys to read one table, inheritance that includes the future, and MANAGE without ownership. Walk out with a catalog layout and a grant matrix for three teams.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/a3-unity-catalog-governance.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Unity Catalog: who may see what - learn databricks with phoebe">
+<meta name="twitter:description" content="Leader session 3 of 6. One tree, three keys to read, and grants that reach tables created next year.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 3 · Unity Catalog: who may see what - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Leader session 3 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Leader track · Session 3 of 6</div>
+    <h1>Unity Catalog: who may see <span class="accent">what</span></h1>
+    <p class="sub">Session 2 showed that a Delta table remembers every change. That memory is only useful if the right people can read it and the wrong people cannot. On Databricks that job belongs to Unity Catalog: one tree that names every table, view, volume and model, and one set of rules for who may touch each branch. Tonight we read those rules the way a governance owner should, from the privileges reference itself, and turn them into a grant matrix a platform engineer could apply tomorrow morning.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Data leaders, governance owners, platform owners</span>
+      <span class="chip audience">No code</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · One tree, three keys, owners</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: the grant matrix</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Most access arguments in a data team are really naming arguments. Nobody can agree who should see "the customers table" because there are three of them, in three places, with three owners. Unity Catalog starts by fixing the names: every object has exactly one parent and therefore exactly one full name. Once the names are fixed, the access rules are short enough to fit on a sticky note, and three of them carry almost all the weight: the read rule, inheritance, and who may manage grants.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A catalog layout for three teams and a grant matrix you could hand to a platform engineer, written cell by cell as the GRANT statements it becomes, plus the rule worth memorising: "three keys to read: USE CATALOG, USE SCHEMA, SELECT."</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the three-level namespace</span>
+      <h2>One tree for tables, volumes and models</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Unity Catalog organises everything as a tree. At the top sits the metastore; under it, catalogs; under each catalog, schemas; under each schema, the things people actually use: tables, views, volumes of files, and machine learning models. Each object hangs from exactly one parent, so its full name is always three parts long: catalog, schema, object.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 392" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A tree of securables. One metastore at the top, overseen by metastore admins. Under it two catalogs, prod and dev. Under prod, two schemas, prod.sales and prod.ml; under dev, one schema dev.sandbox. Under prod.sales sit table orders and view daily_sales; under prod.ml sit volume raw_files and model churn; under dev.sandbox sits table scratch. The path from metastore to prod to sales to orders is traced in deep red. Each object has exactly one parent, so each has one three-part name such as prod.sales.orders or prod.ml.churn, and the same grants govern tables, volumes and models.">
+        <defs>
+          <filter id="a3aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a3aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a3aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a3aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a3aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a3aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- level 0: metastore -->
+          <rect x="412" y="34" width="200" height="46" rx="8" transform="rotate(-0.6 512 57)" fill="#FFF5F3"/>
+          <!-- level 1: catalogs -->
+          <rect x="185" y="116" width="200" height="40" rx="6" transform="rotate(0.8 285 136)" fill="#FFFFFF"/>
+          <rect x="640" y="116" width="200" height="40" rx="6" transform="rotate(-0.8 740 136)" fill="#FFFFFF"/>
+          <!-- level 2: schemas -->
+          <rect x="60" y="194" width="180" height="40" rx="6" transform="rotate(-1 150 214)" fill="#FFFFFF"/>
+          <rect x="330" y="194" width="180" height="40" rx="6" transform="rotate(1 420 214)" fill="#FFFFFF"/>
+          <rect x="650" y="194" width="180" height="40" rx="6" transform="rotate(-1 740 214)" fill="#FFFFFF"/>
+          <!-- level 3: objects -->
+          <rect x="20" y="272" width="120" height="40" rx="6" transform="rotate(-1.5 80 292)" fill="#FFFFFF"/>
+          <rect x="150" y="272" width="140" height="40" rx="6" transform="rotate(1.2 220 292)" fill="#FFF5F3"/>
+          <rect x="300" y="272" width="140" height="40" rx="6" transform="rotate(-1.2 370 292)" fill="url(#a3aHc)"/>
+          <rect x="450" y="272" width="120" height="40" rx="6" transform="rotate(1.5 510 292)" fill="#FFF5F3"/>
+          <rect x="680" y="272" width="120" height="40" rx="6" transform="rotate(-1.2 740 292)" fill="#FFFFFF"/>
+          <!-- connectors; the prod.sales.orders path in deep red -->
+          <path d="M480 82 L292 114" stroke="#9E0B00" stroke-width="3" marker-end="url(#a3aAr)"/>
+          <path d="M550 82 L734 114" marker-end="url(#a3aAr)"/>
+          <path d="M250 158 L156 192" stroke="#9E0B00" stroke-width="3" marker-end="url(#a3aAr)"/>
+          <path d="M320 158 L414 192" marker-end="url(#a3aAr)"/>
+          <path d="M740 158 L740 192" marker-end="url(#a3aAr)"/>
+          <path d="M120 236 L86 270" stroke="#9E0B00" stroke-width="3" marker-end="url(#a3aAr)"/>
+          <path d="M180 236 L214 270" marker-end="url(#a3aAr)"/>
+          <path d="M400 236 L374 270" marker-end="url(#a3aAr)"/>
+          <path d="M440 236 L504 270" marker-end="url(#a3aAr)"/>
+          <path d="M740 236 L740 270" marker-end="url(#a3aAr)"/>
+          <!-- the full-name chip -->
+          <rect x="20" y="332" width="440" height="30" rx="6" transform="rotate(0.4 240 347)" fill="#FFAB00" stroke="#4D3200"/>
+        </g>
+
+        <text class="a3aH" x="428" y="54">metastore</text>
+        <text class="a3aS" x="428" y="71">metastore admins oversee it</text>
+        <text class="a3aL" x="199" y="141">catalog prod</text>
+        <text class="a3aL" x="654" y="141">catalog dev</text>
+        <text class="a3aL" x="74" y="219">schema prod.sales</text>
+        <text class="a3aL" x="344" y="219">schema prod.ml</text>
+        <text class="a3aL" x="664" y="219">schema dev.sandbox</text>
+        <text class="a3aL" x="32" y="297">table orders</text>
+        <text class="a3aL" x="162" y="297">view daily_sales</text>
+        <rect x="310" y="282" width="120" height="20" rx="4" fill="#FFFFFF"/>
+        <text class="a3aL" x="314" y="297">volume raw_files</text>
+        <text class="a3aL" x="462" y="297">model churn</text>
+        <text class="a3aL" x="692" y="297">table scratch</text>
+        <text class="a3aB" x="34" y="352">prod.sales.orders · prod.ml.churn: catalog.schema.object</text>
+        <text class="a3aS" x="480" y="352">the same grants govern tables, volumes and models</text>
+
+        <text class="a3aN" x="20" y="384">Every box has exactly one parent, so every object has exactly one three-part name. Names are constructed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - one parent per object means one full name per object, and every access rule hangs off that name</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>catalog.schema.table is the whole address<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks reference "Unity Catalog privileges and securable objects" names a table as <code>catalog.schema.table</code>. Everything the platform governs is a securable somewhere in that tree, and the tree has a single root: the metastore, which metastore admins oversee. In practice this means two things for a leader. First, "which customers table?" always has a precise answer, because two tables can only share a short name if they sit in different schemas or catalogs, and then their full names differ. Second, every grant has an address: it is attached to one node of the tree, and the rest of the session is about what that attachment reaches.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Models live in the same tree<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks page "Manage model lifecycle in Unity Catalog" registers models under the same three-part pattern, <code>&lt;catalog&gt;.&lt;schema&gt;.&lt;model&gt;</code>, so a churn model is <code>prod.ml.churn</code>, a sibling of the tables it was trained on. The same doc says creating a model needs CREATE MODEL plus USE SCHEMA, loading one needs EXECUTE, and adding a version needs CREATE MODEL VERSION. The leader point: there is no second permission system for models. The person who decides who may read the training table also decides who may load the model, in the same place, with the same grammar. Analyst session 7 registers a real model and loads it by alias.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What Free Edition gives you to practise on<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks Free Edition is free, non-commercial and serverless only. Its limitations page (last updated 29 September 2026 when read) lists one workspace and one metastore per account, so you can practise catalogs, schemas and grants inside a single tree but not a multi-workspace layout. Limits change; re-check the limitations page before you plan a workshop around them.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Two "customers" tables, one tree (constructed).</strong> Sales and support each built a table called customers, in their own folders, with their own definitions of "active". For two years every dashboard argument began with "which one?". Moving both into one metastore did not merge them; it named them: <code>sales.crm.customers</code> and <code>support.tickets.customers</code>. The duplicate was suddenly visible in one search, each had a named owner, and the conversation moved from "who is right" to "which one do we certify".</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the read rule and inheritance</span>
+      <h2>Three keys to read one table</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Granting SELECT on a table is not enough to let anyone read it. The reader also needs permission to enter the catalog and the schema above it. And a grant made high in the tree flows down to everything below it, including objects that do not exist yet. Those two rules explain most of the access tickets a platform team ever sees.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 292" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left panel, the read rule: three locks in a row, USE CATALOG on catalog prod, USE SCHEMA on schema sales, SELECT on table orders. Analyst A holds only SELECT and is stopped at the first lock: denied, missing USE CATALOG, USE SCHEMA. Analyst B holds all three and can read. Right panel, inheritance: GRANT SELECT ON SCHEMA prod.sales TO finance flows down to table orders, table returns, and a table created next year. Local model outputs: finance on the table created later, can read; analysts on the same table, denied, missing SELECT.">
+        <defs>
+          <filter id="a3bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a3bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a3bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a3bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a3bC { font: 600 11px ui-monospace, Menlo, Consolas, monospace; fill: #9E0B00; }
+          .a3bX { font: 600 11px Inter, sans-serif; fill: #991B1B; }
+          .a3bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a3bH" x="30" y="30">THE READ RULE: THREE KEYS</text>
+        <text class="a3bH" x="572" y="30">INHERITANCE: DOWN, INCLUDING LATER</text>
+
+        <g filter="url(#a3bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- three locks -->
+          <rect x="40" y="56" width="140" height="58" rx="8" transform="rotate(-1 110 85)" fill="#FFFFFF"/>
+          <rect x="200" y="56" width="140" height="58" rx="8" transform="rotate(1 270 85)" fill="#FFFFFF"/>
+          <rect x="360" y="56" width="150" height="58" rx="8" transform="rotate(-1 435 85)" fill="#FFFFFF"/>
+          <path d="M182 85 L198 85" marker-end="url(#a3bAr)"/>
+          <path d="M342 85 L358 85" marker-end="url(#a3bAr)"/>
+          <!-- reader A: wrong way -->
+          <rect x="30" y="160" width="262" height="52" rx="8" transform="rotate(0.6 161 186)" fill="#FFFFFF" stroke="#FCA5A5"/>
+          <path d="M100 158 L106 120" stroke="#991B1B"/>
+          <path d="M88 136 L124 140" stroke="#991B1B" stroke-width="3"/>
+          <!-- reader B -->
+          <rect x="310" y="160" width="210" height="52" rx="8" transform="rotate(-0.6 415 186)" fill="#FFF5F3"/>
+          <path d="M420 158 L432 120" marker-end="url(#a3bAr)"/>
+          <!-- divider -->
+          <path d="M546 44 L546 256" stroke="#C4CFD3" stroke-dasharray="5 5"/>
+          <!-- inheritance -->
+          <rect x="600" y="52" width="230" height="48" rx="8" transform="rotate(-0.8 715 76)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="574" y="154" width="84" height="48" rx="6" transform="rotate(-2 616 178)" fill="#FFFFFF"/>
+          <rect x="672" y="154" width="84" height="48" rx="6" transform="rotate(1.5 714 178)" fill="#FFFFFF"/>
+          <rect x="768" y="154" width="100" height="48" rx="6" transform="rotate(2 818 178)" fill="#FFFFFF" stroke-dasharray="6 5"/>
+          <path d="M680 102 L622 150" marker-end="url(#a3bAr)"/>
+          <path d="M715 102 L714 150" marker-end="url(#a3bAr)"/>
+          <path d="M750 102 L812 150" marker-end="url(#a3bAr)"/>
+        </g>
+
+        <text class="a3bL" x="54" y="80">catalog prod</text>
+        <text class="a3bC" x="54" y="100">USE CATALOG</text>
+        <text class="a3bL" x="214" y="80">schema sales</text>
+        <text class="a3bC" x="214" y="100">USE SCHEMA</text>
+        <text class="a3bL" x="374" y="80">table orders</text>
+        <text class="a3bC" x="374" y="100">SELECT</text>
+
+        <text class="a3bL" x="44" y="182">analyst A holds SELECT only</text>
+        <text class="a3bX" x="44" y="200">denied, missing USE CATALOG, USE SCHEMA</text>
+        <text class="a3bL" x="324" y="182">analyst B holds all three</text>
+        <text class="a3bC" x="324" y="200">can read</text>
+
+        <text class="a3bS" x="30" y="236">rule: SELECT on the table, USE CATALOG on its catalog,</text>
+        <text class="a3bS" x="30" y="252">USE SCHEMA on its schema (Databricks privileges reference)</text>
+
+        <text class="a3bB" x="614" y="72">GRANT SELECT ON SCHEMA</text>
+        <text class="a3bB" x="614" y="89">prod.sales TO finance</text>
+        <text class="a3bL" x="586" y="182">orders</text>
+        <text class="a3bS" x="586" y="196">exists</text>
+        <text class="a3bL" x="684" y="182">returns</text>
+        <text class="a3bS" x="684" y="196">exists</text>
+        <text class="a3bL" x="780" y="182">next year</text>
+        <text class="a3bS" x="780" y="196">created later</text>
+
+        <text class="a3bS" x="572" y="234">finance, table created later: can read</text>
+        <text class="a3bS" x="572" y="252">analysts, same table: denied, missing SELECT</text>
+
+        <text class="a3bN" x="30" y="282">Outputs from a local model of the documented rule (analyst session 6), not Unity Catalog itself.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - SELECT alone opens nothing; a schema grant opens every table under it, including tables nobody has built yet</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The read rule, in the reference's own words<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>To read a table, the privileges reference requires "SELECT on the table, USE CATALOG on the parent catalog, and USE SCHEMA on the parent schema". USE CATALOG and USE SCHEMA grant no data by themselves; they are the doors you must be allowed through to reach anything inside. That is why a familiar access ticket reads "I was granted SELECT and still cannot see the table": someone opened the last lock and forgot the first two. Teach your requesters the three keys and many of those tickets never need filing.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Inheritance flows down, into the future<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The same reference says a privilege granted on a catalog or schema applies to "all current and future objects" inside it. That is the most powerful rule in the system and the riskiest. Powerful, because one schema-level grant replaces hundreds of table grants and never needs updating when a new table lands. Risky, because the grant was decided for the tables you could see on the day you made it. A table added next quarter, perhaps one with salaries in it, inherits the same audience without anyone deciding that it should. The governance question is never only "who can read this schema today?" but "what are we agreeing to let into this schema later?"</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The rule, run as a local model<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Analyst session 6 encodes the documented rule in a few lines of Python and runs it. It is a local model of the rule, not Unity Catalog itself, but its outputs make the logic concrete. With SELECT alone on <code>main.taxi.trips</code>, the analysts group gets "denied, missing USE CATALOG, USE SCHEMA". After USE CATALOG on <code>main</code> and USE SCHEMA on <code>main.taxi</code> are added: "can read". The finance group, granted SELECT on the whole schema plus the two doors, can read <code>main.taxi.zones_created_next_year</code>, a table that did not exist when the grant was made. The analysts group, holding SELECT only on <code>trips</code>, is told "denied, missing SELECT" for that same new table.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The schema that grew a payroll table (constructed).</strong> A finance analytics schema was opened to the whole finance group with one schema-level SELECT, a sensible decision for its eleven reporting tables. Eight months later an engineer landed a payroll extract in the same schema because "it is finance data". Nobody changed a grant, and the whole group could read every salary the same afternoon. The fix was not a new rule; it was a second schema with its own, narrower audience, and a standing question at design review: which schema does this table belong in, given who already reads that schema?</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers ownership and managing privileges</span>
+      <h2>Owners, managers and admins</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Every securable has an owner, and the owner can grant on it. If the owner is one person, every access request in the organisation queues behind that person's inbox and holidays. Unity Catalog gives you a way to spread the work without handing over the object: the MANAGE privilege.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before and after. Before, a wrong-way panel: requests from analysts, finance and ml-engineers all route through one owner, a single person, before reaching the orders table; if that person leaves, nobody can grant. After: an owner that can transfer and drop, and a data-stewards group holding MANAGE, which grants to analysts, finance and ml-engineers. MANAGE lets users manage privileges, transfer ownership, rename and drop an object without owning it. ALL PRIVILEGES excludes MANAGE, READ METADATA, EXTERNAL USE SCHEMA and EXTERNAL USE LOCATION.">
+        <defs>
+          <filter id="a3cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="79" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a3cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a3cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a3cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a3cX { font: 600 11px Inter, sans-serif; fill: #991B1B; }
+          .a3cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a3cH" x="30" y="28">BEFORE: EVERY GRANT WAITS ON ONE OWNER</text>
+        <text class="a3cH" x="470" y="28">AFTER: OWNER PLUS A GROUP HOLDING MANAGE</text>
+
+        <g filter="url(#a3cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- panels -->
+          <rect x="20" y="40" width="410" height="210" rx="10" transform="rotate(-0.4 225 145)" fill="#FFFFFF" stroke="#FCA5A5"/>
+          <rect x="460" y="40" width="400" height="210" rx="10" transform="rotate(0.4 660 145)" fill="#FFF5F3"/>
+          <!-- before: requests, owner, table -->
+          <rect x="36" y="56" width="110" height="34" rx="6" transform="rotate(-2 91 73)" fill="#FFFFFF"/>
+          <rect x="36" y="108" width="110" height="34" rx="6" transform="rotate(1.5 91 125)" fill="#FFFFFF"/>
+          <rect x="36" y="160" width="110" height="34" rx="6" transform="rotate(-1.5 91 177)" fill="#FFFFFF"/>
+          <rect x="182" y="104" width="116" height="44" rx="6" transform="rotate(1 240 126)" fill="#FFFFFF"/>
+          <rect x="330" y="108" width="84" height="36" rx="6" transform="rotate(-1.5 372 126)" fill="url(#a3cHc)"/>
+          <path d="M148 75 L180 116" marker-end="url(#a3cAr)"/>
+          <path d="M148 125 L180 126" marker-end="url(#a3cAr)"/>
+          <path d="M148 176 L180 136" marker-end="url(#a3cAr)"/>
+          <path d="M300 126 L328 126" marker-end="url(#a3cAr)"/>
+          <ellipse cx="240" cy="126" rx="74" ry="40" stroke="#991B1B" stroke-dasharray="5 5"/>
+          <!-- after: owner, MANAGE group, requests -->
+          <rect x="490" y="58" width="150" height="44" rx="6" transform="rotate(-1 565 80)" fill="#FFFFFF"/>
+          <rect x="490" y="122" width="160" height="44" rx="6" transform="rotate(1 570 144)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="726" y="56" width="120" height="34" rx="6" transform="rotate(1.5 786 73)" fill="#FFFFFF"/>
+          <rect x="726" y="108" width="120" height="34" rx="6" transform="rotate(-1.5 786 125)" fill="#FFFFFF"/>
+          <rect x="726" y="160" width="120" height="34" rx="6" transform="rotate(2 786 177)" fill="#FFFFFF"/>
+          <path d="M654 140 L722 78" marker-end="url(#a3cAr)"/>
+          <path d="M654 144 L722 126" marker-end="url(#a3cAr)"/>
+          <path d="M654 150 L722 174" marker-end="url(#a3cAr)"/>
+        </g>
+
+        <text class="a3cL" x="48" y="78">analysts</text>
+        <text class="a3cL" x="48" y="130">finance</text>
+        <text class="a3cL" x="48" y="182">ml-engineers</text>
+        <text class="a3cL" x="196" y="123">owner</text>
+        <text class="a3cS" x="196" y="139">one person</text>
+        <rect x="340" y="116" width="62" height="20" rx="4" fill="#FFFFFF"/>
+        <text class="a3cL" x="346" y="131">orders</text>
+        <text class="a3cX" x="36" y="222">the person leaves: nobody can grant on orders</text>
+
+        <text class="a3cL" x="504" y="78">owner</text>
+        <text class="a3cS" x="504" y="94">a group, not a person</text>
+        <text class="a3cB" x="504" y="141">MANAGE</text>
+        <text class="a3cB" x="504" y="157">group: data-stewards</text>
+        <text class="a3cL" x="740" y="78">analysts</text>
+        <text class="a3cL" x="740" y="130">finance</text>
+        <text class="a3cL" x="740" y="182">ml-engineers</text>
+        <text class="a3cS" x="476" y="212">manage privileges, transfer ownership, rename,</text>
+        <text class="a3cS" x="476" y="228">and drop an object, without owning it</text>
+
+        <text class="a3cN" x="20" y="272">ALL PRIVILEGES excludes MANAGE, READ METADATA, EXTERNAL USE SCHEMA and EXTERNAL USE LOCATION.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - MANAGE moves the grant work to a group without moving the object; group names are constructed</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Owners, and MANAGE without ownership<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The privileges reference describes MANAGE as the privilege that allows users to manage privileges, transfer ownership, rename, and drop an object, without being its owner. That is exactly the shape a governance function needs: the data product team owns the table, and a stewards group can answer access requests on it when the owners are busy, away or gone. Note one trap the reference spells out: ALL PRIVILEGES does not include MANAGE. Nor does it include READ METADATA, EXTERNAL USE SCHEMA or EXTERNAL USE LOCATION. Granting ALL PRIVILEGES to someone does not make them a manager, and it gives them far more data than most roles need.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Grant to groups, not to people<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>This one is standard practice rather than a sentence quoted from the reference, and it is practice for a good reason. A grant to a person is a decision you must remember to undo when they change role or leave. A grant to a group is a decision about the role; joining and leaving the group, usually handled by your identity team, does the rest. The same logic applies to ownership: a group owner never goes on holiday. Write every row of tonight's matrix as a group.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where role design, row filters and masks live<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Tonight is the Databricks side: which securables exist, which privileges they take, and how grants travel through the tree. The concepts underneath, how to design roles, when attribute-based access beats role-based, and how row filters and column masks work as ideas, are taught in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">the data access control course</a>. Read it before you design anything finer than the table level.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The owner who left (constructed).</strong> A senior engineer created the core sales tables in her own name and handled every access request herself, quickly and well. When she moved to another company, the tables kept working, and nobody could grant on them. For three weeks every new analyst waited while an admin worked out who should own what. The two-line fix, made afterwards for every table: ownership transferred to the sales data team's group, and MANAGE granted to a stewards group, so no single departure can freeze access again.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Lay out the catalog and write the grant matrix</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No account needed. You design the tree for three teams, then fill a matrix whose rows are groups and whose columns are securables, one cell at a time, with the least privilege each group needs. Then you translate every cell into the statement a platform engineer would run. The first row is filled in for you as a constructed example.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A grant matrix. Columns: catalog prod, schema prod.sales, table prod.sales.orders, model prod.ml.churn. Rows: analysts, finance, ml-engineers. The analysts row is filled as a constructed example: USE CATALOG on the catalog, USE SCHEMA on the schema, SELECT on the table, nothing on the model. A bracket under the first three filled cells reads: three keys, the read rule. The finance and ml-engineers rows are empty dashed cells for you to fill.">
+        <defs>
+          <filter id="a3dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="83" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a3dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a3dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a3dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a3dL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a3dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a3dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a3dC { font: 600 11px ui-monospace, Menlo, Consolas, monospace; fill: #9E0B00; }
+          .a3dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a3dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- header row -->
+          <rect x="180" y="30" width="160" height="44" rx="6" transform="rotate(-0.6 260 52)" fill="#FFF5F3"/>
+          <rect x="350" y="30" width="160" height="44" rx="6" transform="rotate(0.6 430 52)" fill="#FFF5F3"/>
+          <rect x="520" y="30" width="160" height="44" rx="6" transform="rotate(-0.6 600 52)" fill="#FFF5F3"/>
+          <rect x="690" y="30" width="160" height="44" rx="6" transform="rotate(0.6 770 52)" fill="#FFF5F3"/>
+          <!-- row 1: analysts, filled -->
+          <rect x="20" y="86" width="150" height="44" rx="6" transform="rotate(-0.8 95 108)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="180" y="86" width="160" height="44" rx="6" transform="rotate(0.5 260 108)" fill="#FFFFFF"/>
+          <rect x="350" y="86" width="160" height="44" rx="6" transform="rotate(-0.5 430 108)" fill="#FFFFFF"/>
+          <rect x="520" y="86" width="160" height="44" rx="6" transform="rotate(0.5 600 108)" fill="#FFFFFF"/>
+          <rect x="690" y="86" width="160" height="44" rx="6" transform="rotate(-0.5 770 108)" fill="#FFFFFF"/>
+          <!-- bracket under the three keys -->
+          <path d="M184 136 L184 143 L676 143 L676 136"/>
+          <!-- row 2: finance, empty -->
+          <rect x="20" y="168" width="150" height="44" rx="6" fill="#FFFFFF"/>
+          <rect x="180" y="168" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="350" y="168" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="520" y="168" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="690" y="168" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <!-- row 3: ml-engineers, empty -->
+          <rect x="20" y="222" width="150" height="44" rx="6" fill="#FFFFFF"/>
+          <rect x="180" y="222" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="350" y="222" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="520" y="222" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="690" y="222" width="160" height="44" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+        </g>
+
+        <text class="a3dH" x="20" y="57">GROUP</text>
+        <text class="a3dS" x="192" y="48">catalog</text>
+        <text class="a3dC" x="192" y="65">prod</text>
+        <text class="a3dS" x="362" y="48">schema</text>
+        <text class="a3dC" x="362" y="65">prod.sales</text>
+        <text class="a3dS" x="532" y="48">table</text>
+        <text class="a3dC" x="532" y="65">prod.sales.orders</text>
+        <text class="a3dS" x="702" y="48">model</text>
+        <text class="a3dC" x="702" y="65">prod.ml.churn</text>
+
+        <text class="a3dB" x="32" y="105">analysts</text>
+        <text class="a3dB" x="32" y="121">example row</text>
+        <text class="a3dC" x="192" y="112">USE CATALOG</text>
+        <text class="a3dC" x="362" y="112">USE SCHEMA</text>
+        <text class="a3dC" x="532" y="112">SELECT</text>
+        <text class="a3dS" x="702" y="112">nothing: no need</text>
+        <text class="a3dS" x="360" y="160">three keys: the read rule</text>
+
+        <text class="a3dL" x="32" y="195">finance</text>
+        <text class="a3dL" x="32" y="249">ml-engineers</text>
+        <text class="a3dS" x="702" y="249">loading needs EXECUTE</text>
+
+        <text class="a3dN" x="20" y="288">Row 1 is constructed. Each cell holds the least privilege that group needs; blank means nothing.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber row is the pattern; every other row starts from the same three keys and adds only what the work needs</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Choose the catalog split.</strong> Two layouts are common. Split by environment (<code>dev</code>, <code>prod</code>) and the same schemas repeat in each catalog, so promoting work is a change of one name and production grants can be stricter than development ones. Split by domain (<code>sales</code>, <code>finance</code>) and each catalog mirrors an owning team, so ownership and budgets line up. Both are used; pick the one that matches how your organisation draws accountability, and write down why.</p>
+        <div class="prompt-box good"><span class="label">★ The layout decision, one paragraph</span>Split: by environment.
+Catalogs: dev, prod.
+Schemas in prod: sales (orders, returns), ml (models, training volumes).
+Why: production access is reviewed quarterly; dev access is broad.
+Owner of every catalog and schema: a group, never a person.</div>
+      </div>
+      <div class="step">
+        <p><strong>List three groups and the job each one does.</strong> Describe the work, not the wish list. "Reads orders for weekly reporting" leads to a privilege; "needs access to sales data" leads to an argument.</p>
+        <div class="prompt-box good"><span class="label">★ Three groups, written as work</span>analysts       read prod.sales.orders for weekly reporting
+finance        read every table in prod.sales, including new ones
+ml-engineers   load the churn model prod.ml.churn in scoring jobs</div>
+      </div>
+      <div class="step">
+        <p><strong>Fill the matrix with the least privilege per cell.</strong> Start every reading row from the three keys and stop as soon as the job is covered. Leave a cell blank rather than writing a privilege "just in case".</p>
+        <div class="prompt-box good"><span class="label">★ The filled matrix</span>                catalog prod   schema prod.sales      table orders   model churn
+analysts        USE CATALOG    USE SCHEMA             SELECT         -
+finance         USE CATALOG    USE SCHEMA, SELECT     (inherited)    -
+ml-engineers    see doc        -                      -              EXECUTE (see doc)</div>
+      </div>
+      <div class="step">
+        <p><strong>Mark where inheritance gives more than intended.</strong> Every privilege written on a catalog or schema cell reaches all current and future objects underneath. Circle each one and write, beside it, the kind of table that would be a problem if it appeared there next year.</p>
+        <div class="prompt-box good"><span class="label">★ The inheritance check</span>finance: SELECT on schema prod.sales
+  reaches: orders, returns, and every table created there later
+  risk:    a customer-contact or salary extract landing in prod.sales
+  control: sensitive extracts get their own schema; design review asks
+           "who already reads the schema this table is joining?"</div>
+      </div>
+      <div class="step">
+        <p><strong>Write each cell as the statement it becomes.</strong> One cell, one line. For the model column, write it in words: the models-in-Unity-Catalog doc says loading a model needs EXECUTE on it, and your platform engineer applies that from the doc.</p>
+        <div class="prompt-box good"><span class="label">★ The analysts row, as GRANT statements</span>GRANT USE CATALOG ON CATALOG prod TO `analysts`
+GRANT USE SCHEMA ON SCHEMA prod.sales TO `analysts`
+GRANT SELECT ON TABLE prod.sales.orders TO `analysts`
+
+Model column, in words: ml-engineers need EXECUTE on prod.ml.churn to load it.</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The matrix that is one cell long</span>GRANT ALL PRIVILEGES ON CATALOG prod TO `everyone`
+(every table, view, volume and model in prod, today and every one created later,
+ for every user, and still no one who holds MANAGE)</div>
+
+    <div class="callout tip">
+      <p><strong>Start from the read rule and add; never start from ALL PRIVILEGES and subtract.</strong> Subtraction depends on remembering everything the big grant included, today and in future. Addition depends only on knowing what the job needs, which you wrote down in step 2.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 4</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Finish the matrix</strong> for all three groups and write every cell as a GRANT statement or, for models, a sentence.</li>
+      <li><strong>Find the last access ticket</strong> your team closed that said "granted, still cannot see it". Check whether the missing key was USE CATALOG or USE SCHEMA.</li>
+      <li><strong>List every object your organisation owns in one person's name</strong>, in any system. For each, name the group that should own it and the group that should be able to manage grants on it.</li>
+      <li><strong>Pick one schema with a broad grant</strong> and ask its owner: "what kind of table would we regret seeing appear here?" Write the answer down as a design-review question.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 3 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · An analyst has been granted SELECT on prod.sales.orders and nothing else. What happens when she queries it?</p>
+      <button class="qopt" type="button">A · She can read it, because SELECT is the read privilege</button>
+      <button class="qopt" type="button">B · She can read it, but only the columns she has used before</button>
+      <button class="qopt" type="button">C · She is denied: she is missing USE CATALOG on prod and USE SCHEMA on prod.sales</button>
+      <button class="qopt" type="button">D · She is denied until the table owner adds her by name to the table</button>
+      <p class="qwhy">The reference requires SELECT on the table, USE CATALOG on the parent catalog and USE SCHEMA on the parent schema. The local model in analyst session 6 prints exactly this: "denied, missing USE CATALOG, USE SCHEMA".</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Finance holds SELECT on schema prod.sales. Next year an engineer creates a new table in that schema. Can finance read it?</p>
+      <button class="qopt" type="button">A · Yes: privileges on a schema apply to all current and future objects inside it</button>
+      <button class="qopt" type="button">B · No: grants cover only the tables that existed when they were made</button>
+      <button class="qopt" type="button">C · Only after an admin re-runs the original GRANT</button>
+      <button class="qopt" type="button">D · Only if the new table is a view</button>
+      <p class="qwhy">Inheritance includes the future. That is why one schema grant can replace hundreds of table grants, and why "what might land in this schema later?" is a governance question, not an engineering detail.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · Your table owner is on leave for a month. What lets a stewards group handle access requests on her tables without taking ownership?</p>
+      <button class="qopt" type="button">A · Granting the stewards ALL PRIVILEGES on the catalog</button>
+      <button class="qopt" type="button">B · Sharing the owner's login with the stewards</button>
+      <button class="qopt" type="button">C · Granting the stewards SELECT on every table</button>
+      <button class="qopt" type="button">D · Granting the stewards MANAGE, which lets a non-owner manage privileges, transfer ownership, rename and drop</button>
+      <p class="qwhy">MANAGE is the privilege built for this. ALL PRIVILEGES does not include it, and also hands over every table in the catalog; SELECT only reads.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">catalog.schema.table, the three-key read rule, inheritance to current and future objects, MANAGE, what ALL PRIVILEGES excludes, metastore admins</span><span class="note">Databricks documentation, "Unity Catalog privileges and securable objects", docs.databricks.com, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Models as catalog.schema.model; CREATE MODEL, EXECUTE, CREATE MODEL VERSION</span><span class="note">Databricks documentation, "Manage model lifecycle in Unity Catalog", docs.databricks.com, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Free Edition: one workspace and one metastore per account; free, non-commercial, serverless only</span><span class="note">Databricks documentation, Free Edition limitations page, docs.databricks.com, read 3 October 2026; limits change, re-check before use</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Denied with SELECT alone; can read with all three; schema SELECT reaching a later table; denied, missing SELECT</span><span class="note">Run in this build: analyst session 6 local model of the documented rule (b6.py), not Unity Catalog itself</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Grant to groups, not people</span><span class="note">Standard practice, stated as practice; not a quoted rule</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The two customers tables, the payroll schema, the owner who left, the example matrix row and object names</span><span class="note">Constructed for teaching</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>One name per object</b><span>catalog.schema.table, and catalog.schema.model for models.</span></div>
+      <div class="cheat-item"><b>Three keys to read</b><span>USE CATALOG, USE SCHEMA, SELECT. SELECT alone opens nothing.</span></div>
+      <div class="cheat-item"><b>Inheritance includes the future</b><span>A catalog or schema grant reaches tables created next year.</span></div>
+      <div class="cheat-item"><b>MANAGE without ownership</b><span>Manage grants, transfer, rename, drop, without owning the object.</span></div>
+      <div class="cheat-item"><b>ALL PRIVILEGES is not all</b><span>It excludes MANAGE, READ METADATA and the two EXTERNAL USE privileges.</span></div>
+      <div class="cheat-item"><b>Grant to groups</b><span>People change roles; a group grant follows the role, not the person.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The grants decide who may read these tables. Session 4 asks who actually runs the code that reads them, and on what: an analyst's notebook on a shared cluster, or a scheduled job on compute that exists only for the length of the run, and why the two are billed at different rates.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 3 of 6 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="a2-a-table-that-remembers.html">← Prev: Delta: a table that remembers</a> &nbsp;·&nbsp; <a href="a4-notebooks-vs-jobs.html">Next: Notebooks versus jobs →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

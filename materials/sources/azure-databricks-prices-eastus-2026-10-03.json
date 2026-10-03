@@ -1,0 +1,286 @@
+{
+ "retrieved": "2026-10-03",
+ "query": "https://prices.azure.com/api/retail/prices?$filter=serviceName eq 'Azure Databricks' and armRegionName eq 'eastus' and priceType eq 'Consumption'",
+ "items": [
+  {
+   "skuName": "Premium All-purpose Compute",
+   "meterName": "Premium All-purpose Compute DBU",
+   "retailPrice": 0.55,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2018-05-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Jobs Light Compute",
+   "meterName": "Premium Jobs Light Compute DBU",
+   "retailPrice": 0.22,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2019-03-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium - Free Trial Serverless SQL",
+   "meterName": "Premium - Free Trial Serverless SQL DBU",
+   "retailPrice": 0.0,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2023-06-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Enhanced Security and Compliance",
+   "meterName": "Premium Enhanced Security and Compliance DBU",
+   "retailPrice": 0.1,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2023-07-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Interactive Serverless Compute",
+   "meterName": "Premium Interactive Serverless Compute DBU",
+   "retailPrice": 0.95,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2025-05-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Model Training",
+   "meterName": "Premium Model Training DBU",
+   "retailPrice": 0.65,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2023-11-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Jobs Compute Photon",
+   "meterName": "Premium Jobs Compute Photon DBU",
+   "retailPrice": 0.3,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-11-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Advanced Compute Photon Delta Live Tables",
+   "meterName": "Premium Advanced Compute Photon Delta Live Tables DBU",
+   "retailPrice": 0.54,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Advanced Compute Delta Live Tables",
+   "meterName": "Premium Advanced Compute Delta Live Tables DBU",
+   "retailPrice": 0.54,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium - Free Trial All-purpose Compute",
+   "meterName": "Premium - Free Trial All-purpose Compute DBU",
+   "retailPrice": 0.0,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2023-05-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Jobs Compute",
+   "meterName": "Premium Jobs Compute DBU",
+   "retailPrice": 0.3,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2019-03-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium SQL Compute Pro",
+   "meterName": "Premium SQL Compute Pro DBU",
+   "retailPrice": 0.55,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2024-02-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium All-Purpose Photon",
+   "meterName": "Premium All-Purpose Photon DBU",
+   "retailPrice": 0.55,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-11-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium - Free Trial Jobs Compute",
+   "meterName": "Premium - Free Trial Jobs Compute DBU",
+   "retailPrice": 0.0,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2023-05-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Disaster Recovery Replication",
+   "meterName": "Data Processed",
+   "retailPrice": 0.02,
+   "unitOfMeasure": "1 GB",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2026-06-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Serverless SQL",
+   "meterName": "Premium Serverless SQL DBU",
+   "retailPrice": 0.7,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2024-02-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Enhanced Security and Compliance - Mission Critical Add-on",
+   "meterName": "Premium Enhanced Security and Compliance - Mission Critical Add-on DBU",
+   "retailPrice": 0.15,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2026-06-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium SQL Analytics",
+   "meterName": "Premium SQL Analytics DBU",
+   "retailPrice": 0.22,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2021-06-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Automated Serverless Compute",
+   "meterName": "Premium Automated Serverless Compute DBU",
+   "retailPrice": 0.45,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2025-05-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Core Compute Delta Live Tables",
+   "meterName": "Premium Core Compute Delta Live Tables DBU",
+   "retailPrice": 0.3,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Core Compute Photon Delta Live Tables",
+   "meterName": "Premium Core Compute Photon Delta Live Tables DBU",
+   "retailPrice": 0.3,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Pro Compute Photon Delta Live Tables",
+   "meterName": "Premium Pro Compute Photon Delta Live Tables DBU",
+   "retailPrice": 0.38,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Clean Rooms Collaborator",
+   "meterName": "Premium Clean Rooms Collaborator Collaborator",
+   "retailPrice": 50.0,
+   "unitOfMeasure": "1/Day",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2026-03-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium - Free Trial SQL Compute Pro",
+   "meterName": "Premium - Free Trial SQL Compute Pro DBU",
+   "retailPrice": 0.0,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-10-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Databricks Storage Unit",
+   "meterName": "Premium Databricks Storage Unit DSU",
+   "retailPrice": 0.026,
+   "unitOfMeasure": "1",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2024-09-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Serverless Realtime Inferencing",
+   "meterName": "Premium Serverless Realtime Inferencing DBU",
+   "retailPrice": 0.07,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2023-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Pro Compute Delta Live Tables",
+   "meterName": "Premium Pro Compute Delta Live Tables DBU",
+   "retailPrice": 0.38,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2022-04-01T00:00:00Z",
+   "type": "Consumption"
+  },
+  {
+   "skuName": "Premium Database Serverless Compute",
+   "meterName": "Premium Database Serverless Compute DBU",
+   "retailPrice": 0.26,
+   "unitOfMeasure": "1 Hour",
+   "currencyCode": "USD",
+   "armRegionName": "eastus",
+   "effectiveStartDate": "2025-03-01T00:00:00Z",
+   "type": "Consumption"
+  }
+ ]
+}

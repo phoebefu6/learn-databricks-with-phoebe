@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 5 of 8. Load a whole month of NYC taxi trips, 2,964,606 rows, as 31 daily Delta files, compute data skipping by hand from the min and max in the log, then watch OPTIMIZE and Z-order change which question gets cheap. Plus the honest version of what Databricks recommends now: liquid clustering.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Data skipping, OPTIMIZE and clustering - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 5 of 8. Min and max in the log decide which files a query opens. Z-order on pu_zone took the JFK query from 8 of 8 files to 1 of 6, and the 15 January query from 1 of 8 to 6 of 6.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b5-data-skipping-and-clustering.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Data skipping, OPTIMIZE and clustering - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 5 of 8. Per-file min and max, OPTIMIZE, Z-order and liquid clustering, measured on a real month of taxi trips.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 5 · Data skipping, OPTIMIZE and clustering - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 5 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 5 of 8</div>
+    <h1>Data skipping, OPTIMIZE and <span class="accent">clustering</span></h1>
+    <p class="sub">A query on a Delta table does not have to open every file. Each <code>add</code> in the log carries the minimum and maximum of the file's columns, and a reader that sees a filter can rule a file out before touching it. Tonight you load the whole of January 2024, 2,964,606 taxi trips, as 31 daily appends, write the skipping check yourself in six lines, and measure it before and after OPTIMIZE and Z-order. Then the part Databricks would want you to hear first: for new tables it recommends liquid clustering, which your laptop cannot run.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Analysts and engineers who write Python</span>
+      <span class="chip audience">Laptop path needs no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Statistics, OPTIMIZE, clustering</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: skipping by hand on a full month</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Sessions 1 to 4 kept to one day. Tonight the table is the full month from the same TLC file: every trip with a pickup inside January 2024, appended one day at a time, so the folder starts as 31 data files with 31 log entries. The laptop path runs <code>deltalake</code> 1.6.6 and DuckDB, and every number in the build-along was printed by running it. The Free Edition path shows the Databricks commands, labelled and not run.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = run, outputs pasted</span>
+      <span class="pill">Free Edition path = the same moves, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A skipping function you wrote from the log's own min and max, a before-and-after of OPTIMIZE and Z-order on 2,964,606 real trips (JFK from 31 of 31 files down to 1 of 6), and the honest version of "Databricks recommends liquid clustering for new tables", including why your laptop still uses Z-order.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers per-file statistics</span>
+      <h2>Min and max decide what a query reads</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Session 2 showed that every <code>add</code> action can carry a <code>stats</code> field. The protocol says what it is for: "These statistics can be used for eliminating files based on query predicates". The rule is a single comparison. A filter <code>pu_zone = 132</code> can only find rows in a file whose <code>pu_zone</code> range includes 132; every other file is skipped without being opened.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five of the 31 daily files, for 1, 2, 15, 30 and 31 January. Each file's pickup_ts range covers only its own day, while its pu_zone range is wide and includes 132. Query 1, pu_zone = 132 for JFK, must read every file: 31 of 31 files, 100.0 percent of bytes. Query 2, pickups on 15 January, reads only the 15 January file: 1 of 31 files, 2.7 percent of bytes.">
+        <defs>
+          <filter id="b5aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="51" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b5aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b5aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b5aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b5aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b5aV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b5aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b5aH" x="30" y="26">trips_month: 31 DAILY FILES, EACH WITH ITS OWN [MIN, MAX] IN THE LOG</text>
+
+        <g filter="url(#b5aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="818" cy="20" r="8"/>
+          <path d="M824 26 L834 36"/>
+          <rect x="30" y="44" width="140" height="74" rx="8" transform="rotate(-1 100 81)" fill="#FFFFFF"/>
+          <rect x="190" y="44" width="140" height="74" rx="8" transform="rotate(1 260 81)" fill="#FFFFFF"/>
+          <rect x="370" y="44" width="140" height="74" rx="8" transform="rotate(-0.8 440 81)" fill="#FFF5F3"/>
+          <rect x="550" y="44" width="140" height="74" rx="8" transform="rotate(1 620 81)" fill="#FFFFFF"/>
+          <rect x="710" y="44" width="140" height="74" rx="8" transform="rotate(-1 780 81)" fill="#FFFFFF"/>
+          <rect x="60" y="158" width="80" height="24" rx="5" transform="rotate(1 100 170)" fill="#FFFFFF"/>
+          <rect x="220" y="158" width="80" height="24" rx="5" transform="rotate(-1 260 170)" fill="#FFFFFF"/>
+          <rect x="400" y="158" width="80" height="24" rx="5" transform="rotate(1 440 170)" fill="#FFFFFF"/>
+          <rect x="580" y="158" width="80" height="24" rx="5" transform="rotate(-1 620 170)" fill="#FFFFFF"/>
+          <rect x="740" y="158" width="80" height="24" rx="5" transform="rotate(1 780 170)" fill="#FFFFFF"/>
+          <rect x="60" y="260" width="80" height="24" rx="5" transform="rotate(-1 100 272)" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="220" y="260" width="80" height="24" rx="5" transform="rotate(1 260 272)" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="400" y="260" width="80" height="24" rx="5" transform="rotate(-1 440 272)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="580" y="260" width="80" height="24" rx="5" transform="rotate(1 620 272)" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="740" y="260" width="80" height="24" rx="5" transform="rotate(-1 780 272)" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+        </g>
+
+        <text class="b5aH" x="42" y="64">1 Jan file</text>
+        <text class="b5aS" x="42" y="84">ts: 1 Jan only</text>
+        <text class="b5aS" x="42" y="102">zone: spans 132</text>
+        <text class="b5aH" x="202" y="64">2 Jan file</text>
+        <text class="b5aS" x="202" y="84">ts: 2 Jan only</text>
+        <text class="b5aS" x="202" y="102">zone: spans 132</text>
+        <text class="b5aH" x="345" y="86">...</text>
+        <text class="b5aH" x="382" y="64">15 Jan file</text>
+        <text class="b5aS" x="382" y="84">ts: 15 Jan only</text>
+        <text class="b5aS" x="382" y="102">zone: spans 132</text>
+        <text class="b5aH" x="525" y="86">...</text>
+        <text class="b5aH" x="562" y="64">30 Jan file</text>
+        <text class="b5aS" x="562" y="84">ts: 30 Jan only</text>
+        <text class="b5aS" x="562" y="102">zone: spans 132</text>
+        <text class="b5aH" x="722" y="64">31 Jan file</text>
+        <text class="b5aS" x="722" y="84">ts: 31 Jan only</text>
+        <text class="b5aS" x="722" y="102">zone: spans 132</text>
+
+        <text class="b5aH" x="30" y="146">Query 1 · WHERE pu_zone = 132 (JFK)</text>
+        <text class="b5aL" x="86" y="175">read</text>
+        <text class="b5aL" x="246" y="175">read</text>
+        <text class="b5aL" x="426" y="175">read</text>
+        <text class="b5aL" x="606" y="175">read</text>
+        <text class="b5aL" x="766" y="175">read</text>
+        <text class="b5aV" x="30" y="214">31 of 31 files read · 100.0% of bytes</text>
+
+        <text class="b5aH" x="30" y="248">Query 2 · WHERE pickup_ts on 15 January</text>
+        <text class="b5aS" x="88" y="277">skip</text>
+        <text class="b5aS" x="248" y="277">skip</text>
+        <text class="b5aB" x="426" y="277">read</text>
+        <text class="b5aS" x="608" y="277">skip</text>
+        <text class="b5aS" x="768" y="277">skip</text>
+        <text class="b5aV" x="30" y="316">1 of 31 files read · 2.7% of bytes</text>
+
+        <text class="b5aN" x="30" y="338">Same files, same statistics. The layout decides which question gets to skip.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - daily appends gave every file a one-day time range for free, and a zone range wide enough to hold JFK</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What the log records about each file<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>PROTOCOL.md lists the per-file statistics: <code>numRecords</code>, <code>minValues</code>, <code>maxValues</code>, <code>nullCount</code> and <code>tightBounds</code>. String statistics are cut to a prefix and timestamps are truncated to milliseconds. They live inside the <code>add</code> action in the JSON you read in session 2, so a reader can decide which files to skip by reading the log alone.</p>
+        <p>On Databricks, the data skipping page says statistics are collected on "the first 32 columns" by default for Unity Catalog external tables, while managed tables use predictive optimization to choose. Two table properties change the default: <code>delta.dataSkippingNumIndexedCols</code> (how many leading columns) and <code>delta.dataSkippingStatsColumns</code> (a named list, Databricks Runtime 13.3 LTS and above). "Long strings are truncated", so a filter on a long text column skips less than you might hope. The practical move: put the columns your queries filter on early in the schema, or name them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Statistics only help when the data is clustered<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The CIDR 2021 lakehouse paper names min-max statistics as auxiliary data "which enables data skipping optimizations when the base data is clustered". The last four words carry the whole session. In the figure, every daily file holds trips from all over the city, so its <code>pu_zone</code> range is wide and includes 132; the statistics are correct and useless for that query. The same files have narrow time ranges, because the loading pattern grouped trips by day. Statistics report the layout; they cannot fix it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Wide bounds, tight bounds and null counts<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The <code>tightBounds</code> field says whether a file's min and max are exact. Bounds that are wider than the real data are still safe: they can only make a reader open a file it did not need, never skip a file that held a match. That asymmetry is the contract. A reader may over-read; it must never under-read. <code>nullCount</code> works the same way: a file whose count shows no nulls in a column can be skipped by an <code>IS NULL</code> filter on it. Session 8's bench has a button that deals the statistics to the wrong files, which is what an under-read looks like.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The dashboard that got slower as the month went on.</strong> An operations dashboard filters on pickup zone. The table behind it is loaded once a day, so by the 31st every query opens 31 files where it opened one on the 1st, and nobody changed a line of SQL. A second dashboard on the same table filters on yesterday's date and stays fast all month. This team is constructed; the two read counts are tonight's real 31 of 31 and 1 of 31.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers OPTIMIZE and Z-order</span>
+      <h2>Fewer files, then the right files</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede"><code>OPTIMIZE</code> does two different jobs that share a name. Compaction (bin-packing) rewrites many small files into fewer larger ones. Z-order rewrites them again, this time sorted so that each file covers a narrow range of the columns you name. Only the second changes which files a filter can skip. Both commit with <code>dataChange</code> false: the rows are the same, only their files move.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three layouts of the same 2,964,606 rows drawn as files in a grid of pickup date across and pu_zone up. Daily appends: 31 vertical slices; JFK reads 31 of 31 files, 100.0 percent of bytes; 15 January reads 1 of 31, 2.7 percent. OPTIMIZE compact: 8 vertical slices; JFK 8 of 8, 100.0 percent; 15 January 1 of 8, 12.9 percent. ZORDER BY pu_zone: 6 horizontal slabs; JFK 1 of 6, 17.9 percent; 15 January 6 of 6, 100.0 percent.">
+        <defs>
+          <filter id="b5bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b5bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b5bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b5bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b5bH" x="40" y="26">THE SAME 2,964,606 ROWS IN THREE LAYOUTS</text>
+        <text class="b5bS" x="40" y="46">Across = pickup date, 1 to 31 Jan. Up = pu_zone. Solid line = JFK query, dashed = 15 January query.</text>
+        <text class="b5bH" x="60" y="74">1 · 31 daily appends</text>
+        <text class="b5bH" x="340" y="74">2 · OPTIMIZE (compact)</text>
+        <text class="b5bH" x="620" y="74">3 · ZORDER BY (pu_zone)</text>
+
+        <g filter="url(#b5bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M820 14 L846 14 M824 20 L850 20 M820 26 L846 26"/>
+          <rect x="60" y="86" width="220" height="160" rx="4" transform="rotate(-0.4 170 166)" fill="url(#b5bHc)"/>
+          <rect x="340" y="86" width="220" height="160" rx="4" transform="rotate(0.4 450 166)" fill="url(#b5bHc)"/>
+          <rect x="620" y="86" width="220" height="160" rx="4" transform="rotate(-0.4 730 166)" fill="#FFFFFF"/>
+          <rect x="620" y="166" width="220" height="27" fill="#FFAB00" stroke="#4D3200"/>
+          <path stroke-width="1" d="M67 86 V246 M74 86 V246 M81 86 V246 M88 86 V246 M95 86 V246 M103 86 V246 M110 86 V246 M117 86 V246 M124 86 V246 M131 86 V246 M138 86 V246 M145 86 V246 M152 86 V246 M159 86 V246 M167 86 V246 M174 86 V246 M181 86 V246 M188 86 V246 M195 86 V246 M202 86 V246 M209 86 V246 M216 86 V246 M223 86 V246 M230 86 V246 M237 86 V246 M245 86 V246 M252 86 V246 M259 86 V246 M266 86 V246 M273 86 V246"/>
+          <path stroke-width="1.5" d="M367 86 V246 M395 86 V246 M422 86 V246 M450 86 V246 M477 86 V246 M505 86 V246 M532 86 V246"/>
+          <path stroke-width="1.5" d="M620 113 H840 M620 139 H840 M620 166 H840 M620 193 H840 M620 219 H840"/>
+          <path stroke="#9E0B00" stroke-width="2.5" d="M60 179 H280 M340 179 H560 M620 179 H840"/>
+          <path stroke-dasharray="5 4" d="M163 86 V246 M443 86 V246 M723 86 V246"/>
+        </g>
+
+        <text class="b5bL" x="60" y="268">JFK: 31/31 files, 100.0%</text>
+        <text class="b5bL" x="60" y="288">15 Jan: 1/31 files, 2.7%</text>
+        <text class="b5bL" x="340" y="268">JFK: 8/8 files, 100.0%</text>
+        <text class="b5bL" x="340" y="288">15 Jan: 1/8 files, 12.9%</text>
+        <text class="b5bL" x="620" y="268">JFK: 1/6 files, 17.9%</text>
+        <text class="b5bL" x="620" y="288">15 Jan: 6/6 files, 100.0%</text>
+
+        <text class="b5bN" x="40" y="314">Percentages are share of bytes read. Shapes are schematic; every count is the run's own output.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - compaction keeps the slices standing up; only Z-order lays them down, and then the date query pays for it</figcaption>
+    </figure>
+
+    <table class="clean">
+      <tr><th>Layout</th><th>Live files</th><th>JFK (pu_zone = 132)</th><th>15 January</th></tr>
+      <tr><td>31 daily appends</td><td>31</td><td>31 of 31 · 100.0%</td><td>1 of 31 · 2.7%</td></tr>
+      <tr><td>OPTIMIZE (compact), 4 MB target</td><td>8</td><td>8 of 8 · 100.0%</td><td>1 of 8 · 12.9%</td></tr>
+      <tr><td><strong>ZORDER BY (pu_zone), 4 MB target</strong></td><td>6</td><td><strong>1 of 6 · 17.9%</strong></td><td>6 of 6 · 100.0%</td></tr>
+    </table>
+    <p class="mono" style="margin-top:6px">Files read and share of bytes, from b5.py on the full month. The JFK query, counted after the Z-order, finds 145,240 trips; OPTIMIZE moves rows between files and never changes the answer.</p>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Compaction: fewer files, same question<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks OPTIMIZE page describes bin-packing as idempotent: run it twice on the same data and the second run does nothing. It is the cure for many small files, and tonight it took 31 files to 8. It did nothing for JFK, which went from 31 of 31 to 8 of 8, still every byte. Each compacted file now covers a few days, so it still holds trips from every zone. The date query even got relatively worse: one file still, but a bigger one, 12.9 percent of the bytes instead of 2.7. Compaction is housekeeping, not clustering.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Z-order, and the Delta paper's multi-column test<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Z-order sorts rows along a space-filling curve before writing, so each output file covers a narrow range of the chosen columns. With one column it is simply a sort, and JFK's trips land in one file of six: 17.9 percent of the bytes.</p>
+        <p>The point of the curve is several columns at once. The Delta Lake paper (Armbrust, Das, Sun, et al., PVLDB 2020, Figure 5) tested 100 Parquet objects with four uniformly random fields. A global sort on one of them let that field skip 99 percent of objects and the other three skip 0 percent. Z-order on all four skipped 67, 60, 47 and 44 percent, at least 43 percent on every field and 54 percent on average, against 25 percent for the single sort. Z-order spreads the benefit; it does not give any one column the full 99.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The trade you just made<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Sorting by zone scattered the days across every file. The 15 January query went from 1 of 8 files to 6 of 6. Nothing broke and no answer changed; the rows found are identical. What changed is which question is cheap. Session 8's bench shows the same pattern on a smaller sample, and adds the version where you cluster on a column nobody filters and lose on both questions.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A 500 TB table that skipped 93 percent.</strong> The Delta Lake paper reports a customer's network-traffic table of about 500 TB, Z-ordered on several fields, where queries skipped 93 percent of the data. This is the authors' own report of their customer, not an independent measurement, and the paper does not publish the queries. It is a fair picture of the upside when the clustering columns match how people actually filter.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers liquid clustering</span>
+      <h2>What Databricks recommends now</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Liquid clustering moves the choice of columns from the command into the table. You declare up to four keys once with <code>CLUSTER BY</code>, and every later <code>OPTIMIZE</code> clusters new data towards them. The protocol records the keys in the log: clustered tables carry a <code>domainMetadata</code> action in the domain <code>delta.clustering</code>, and clustered files carry <code>clusteringProvider</code>, for example <code>"liquid"</code>.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 312" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Where the clustering columns live. Left, ZORDER BY: you name the columns in every OPTIMIZE command; the files are rewritten in z-order; the log records the predicate and target size but not the columns. Right, liquid clustering: CLUSTER BY declares up to four keys on the table; the log stores them in domainMetadata delta.clustering and tags files with clusteringProvider liquid; OPTIMIZE reads the keys and clusters incrementally, OPTIMIZE FULL reclusters all.">
+        <defs>
+          <filter id="b5cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="57" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b5cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b5cC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b5cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b5cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b5cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b5cH" x="40" y="30">ZORDER BY · what the laptop can run</text>
+        <text class="b5cH" x="470" y="30">LIQUID CLUSTERING · recommended for new tables</text>
+
+        <g filter="url(#b5cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M852 16 L860 24 L852 32 L844 24 Z"/>
+          <rect x="30" y="44" width="400" height="236" rx="10" transform="rotate(-0.3 230 162)" fill="#FFF5F3"/>
+          <rect x="450" y="44" width="400" height="236" rx="10" transform="rotate(0.3 650 162)" fill="#FFF5F3"/>
+          <rect x="50" y="64" width="360" height="50" rx="6" transform="rotate(-0.8 230 89)" fill="#FFFFFF"/>
+          <rect x="50" y="144" width="360" height="50" rx="6" transform="rotate(0.8 230 169)" fill="#FFFFFF"/>
+          <rect x="50" y="224" width="360" height="44" rx="6" transform="rotate(-0.6 230 246)" fill="#FFFFFF"/>
+          <path d="M230 118 L230 138" marker-end="url(#b5cAr)"/>
+          <path d="M230 198 L230 218" marker-end="url(#b5cAr)"/>
+          <rect x="470" y="64" width="360" height="50" rx="6" transform="rotate(0.8 650 89)" fill="#FFFFFF"/>
+          <rect x="470" y="144" width="360" height="50" rx="6" transform="rotate(-0.8 650 169)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="470" y="224" width="360" height="44" rx="6" transform="rotate(0.6 650 246)" fill="#FFFFFF"/>
+          <path d="M650 118 L650 138" marker-end="url(#b5cAr)"/>
+          <path d="M650 198 L650 218" marker-end="url(#b5cAr)"/>
+        </g>
+
+        <text class="b5cC" x="64" y="85">OPTIMIZE ... ZORDER BY (pu_zone)</text>
+        <text class="b5cS" x="64" y="103">you name the columns on every run</text>
+        <text class="b5cL" x="64" y="165">files rewritten, ordered on a z-curve</text>
+        <text class="b5cS" x="64" y="183">bench, session 8: 8 files removed, 8 added</text>
+        <text class="b5cL" x="64" y="243">log keeps predicate and targetSize</text>
+        <text class="b5cS" x="64" y="259">but not the columns you chose (delta-rs)</text>
+
+        <text class="b5cC" x="484" y="85">CLUSTER BY (pu_zone)</text>
+        <text class="b5cS" x="484" y="103">keys declared once, on the table, at most 4</text>
+        <text class="b5cB" x="484" y="165">_delta_log: domainMetadata delta.clustering</text>
+        <text class="b5cB" x="484" y="183">files tagged clusteringProvider "liquid"</text>
+        <text class="b5cL" x="484" y="243">OPTIMIZE clusters incrementally</text>
+        <text class="b5cS" x="484" y="259">OPTIMIZE FULL reclusters all (16.4 LTS+)</text>
+
+        <text class="b5cN" x="30" y="302">CLUSTER BY AUTO picks keys on UC managed tables (15.4 LTS+). Not with partitioning or ZORDER.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber box is the difference: the keys become part of the table, so every OPTIMIZE knows them without being told</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The recommendation, in Databricks' own words<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The liquid clustering page says: "Databricks recommends liquid clustering for all new tables, including streaming tables and materialized views". The OPTIMIZE page goes further and recommends it "instead of partitions, ZORDER, or other data layout approaches". This is the vendor's recommendation for its own platform, and it is the default you should expect a Databricks team to follow.</p>
+        <p>The rules, from the same page: <code>CLUSTER BY (col)</code> on create, or <code>ALTER TABLE ... CLUSTER BY</code> later; at most four clustering keys; not compatible with partitioning or ZORDER on the same table. Runtime versions matter: liquid clustering needs Databricks Runtime 15.4 LTS or above, <code>CLUSTER BY AUTO</code> on Unity Catalog managed tables also 15.4 LTS or above, and <code>OPTIMIZE ... FULL</code> to recluster everything 16.4 LTS or above. These versions move; re-check the page before you rely on them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The honest limit of the laptop path<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>delta-rs 1.6.6 offers <code>optimize.z_order</code> and <code>optimize.compact</code>, not <code>CLUSTER BY</code>. So the build-along uses Z-order, and the liquid clustering step is Databricks only, labelled and not run. What carries over unchanged is the skipping itself: a liquid-clustered table is still read by comparing a filter with each file's min and max in the log. Clustering, however it is done, only changes which rows share a file.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Predictive optimization<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>On Unity Catalog managed tables, predictive optimization runs <code>OPTIMIZE</code> for you, and with <code>CLUSTER BY AUTO</code> it also chooses the keys from the queries it sees. That removes the scheduling chore, not the judgement: you still want to know which columns your heaviest queries filter on, so you can check what it picked. Scheduling OPTIMIZE yourself, on tables it does not manage, is an orchestration job: <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">learn data orchestration</a> covers schedules and retries.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The nightly job nobody remembered.</strong> A team runs <code>OPTIMIZE ... ZORDER BY (customer_id)</code> every night from a job written two years ago. The dashboards moved to filtering by region, but the column list lives only in the job's code. Moving the table to <code>CLUSTER BY (region)</code> puts the choice on the table itself, where <code>DESCRIBE DETAIL</code> shows it in <code>clusteringColumns</code> for anyone to review. This team is constructed. The detail behind it is real: in session 8's bench, the Z-order commit delta-rs wrote recorded the predicate and target size but not the columns.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Skipping by hand on a full month</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">You build the month as 31 daily appends, write a function that decides from the log which files a filter must open, and measure two queries through three layouts. The outputs are what the laptop path printed when this build ran <code>b5.py</code> with deltalake 1.6.6 and DuckDB 1.5.6. File counts and percentages depend on how delta-rs packs files at the 4 MB target, so check yours against these rather than assume them.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 306" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The files_read test drawn on a pu_zone number line from 1 to 265, with the query point 132. File A's range covers 132, so it is opened. File B's maximum is below 132, so it is skipped. File C's minimum is above 132, so it is skipped. The rule is read if not max below lo or min above hi. The ranges are illustrative.">
+        <defs>
+          <filter id="b5dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="59" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b5dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b5dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b5dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b5dL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b5dC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b5dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b5dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b5dH" x="30" y="30">files_read: OPEN A FILE ONLY IF ITS [MIN, MAX] CAN OVERLAP [LO, HI]</text>
+        <text class="b5dC" x="446" y="52">pu_zone = 132, so lo = hi = 132</text>
+
+        <g filter="url(#b5dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M826 18 L862 18 L848 32 L848 42 L840 42 L840 32 Z"/>
+          <rect x="120" y="66" width="640" height="22" rx="5" transform="rotate(-0.3 440 77)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="120" y="118" width="240" height="22" rx="5" transform="rotate(0.6 240 129)" fill="#FFFFFF"/>
+          <rect x="481" y="170" width="279" height="22" rx="5" transform="rotate(-0.6 620 181)" fill="#FFFFFF"/>
+          <path d="M438 58 L438 216" stroke="#9E0B00" stroke-width="2.5"/>
+          <path d="M120 226 L760 226"/>
+        </g>
+
+        <text class="b5dL" x="30" y="81">file A</text>
+        <text class="b5dL" x="30" y="133">file B</text>
+        <text class="b5dL" x="30" y="185">file C</text>
+        <text class="b5dS" x="130" y="106">range 1 to 265 holds 132</text>
+        <text class="b5dS" x="130" y="158">max 100 is below lo 132</text>
+        <text class="b5dS" x="490" y="210">min 150 is above hi 132</text>
+        <text class="b5dH" x="776" y="81">open it</text>
+        <text class="b5dS" x="776" y="133">skip</text>
+        <text class="b5dS" x="776" y="185">skip</text>
+        <text class="b5dS" x="116" y="244">1</text>
+        <text class="b5dS" x="428" y="244">132</text>
+        <text class="b5dS" x="750" y="244">265</text>
+
+        <text class="b5dC" x="30" y="272">read = not (max &lt; lo or min &gt; hi)   · the same test runs on pickup_ts with timestamps</text>
+        <text class="b5dN" x="30" y="296">Illustrative ranges. In the run, every daily file's zone range held 132, so all 31 were read.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the whole of data skipping is this one comparison, applied to every file in the log</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Install the pinned versions and fetch the data.</strong> Work in a new empty folder. Skip the download if you still have the January file from session 1.</p>
+        <div class="prompt-box good"><span class="label">★ Terminal</span>pip install deltalake==1.6.6 duckdb==1.5.6 polars==1.44.2 pyarrow==25.0.1 pandas==3.0.6
+curl -O https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet</div>
+      </div>
+      <div class="step">
+        <p><strong>Load the month one day at a time.</strong> 31 appends, so 31 small data files and 31 log entries. Nothing prints yet. This mimics a daily load, which is how most tables really grow.</p>
+        <div class="prompt-box good"><span class="label">★ b5.py, part 1</span># Analyst session 5: data skipping before and after OPTIMIZE and Z-order (no account needed)
+import json, shutil
+import duckdb, pyarrow as pa
+from deltalake import write_deltalake, DeltaTable
+
+shutil.rmtree("trips_month", ignore_errors=True)
+for d in range(1, 32):                     # one append per day: 31 small files
+    day = duckdb.sql(f"""
+      SELECT tpep_pickup_datetime AS pickup_ts, VendorID AS vendor_id, PULocationID AS pu_zone,
+             trip_distance, fare_amount
+      FROM 'yellow_tripdata_2024-01.parquet'
+      WHERE tpep_pickup_datetime &gt;= TIMESTAMP '2024-01-{d:02d}'
+        AND tpep_pickup_datetime &lt;  TIMESTAMP '2024-01-{d:02d}' + INTERVAL 1 DAY
+    """).arrow().read_all()
+    write_deltalake("trips_month", day, mode="append")</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the skipping check and measure the daily layout.</strong> <code>get_add_actions(flatten=True)</code> returns one row per live file with columns such as <code>min.pu_zone</code>, <code>max.pu_zone</code> and <code>size_bytes</code>, read straight from the log. <code>files_read</code> keeps a file unless its range lies wholly below or wholly above the filter. No data file is opened to make the decision.</p>
+        <div class="prompt-box good"><span class="label">★ b5.py, part 2</span>def files_read(path, col, lo, hi):
+    """Data skipping by hand: read a file only if [min, max] can overlap [lo, hi]."""
+    acts = pa.table(DeltaTable(path).get_add_actions(flatten=True)).to_pylist()
+    read = [a for a in acts if not (a[f"max.{col}"] &lt; lo or a[f"min.{col}"] &gt; hi)]
+    return len(read), len(acts), sum(a["size_bytes"] for a in read), sum(a["size_bytes"] for a in acts)
+
+def report(tag):
+    j = files_read("trips_month", "pu_zone", 132, 132)
+    import datetime as dt
+    d = files_read("trips_month", "pickup_ts", dt.datetime(2024, 1, 15), dt.datetime(2024, 1, 15, 23, 59, 59))
+    print(f"{tag:22s} JFK: {j[0]}/{j[1]} files, {100*j[2]/j[3]:.1f}% of bytes | 15 Jan: {d[0]}/{d[1]} files, {100*d[2]/d[3]:.1f}% of bytes")
+
+print("rows:", DeltaTable("trips_month").count() if hasattr(DeltaTable, "count") else "")
+report("31 daily appends")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>rows: 2964606
+31 daily appends       JFK: 31/31 files, 100.0% of bytes | 15 Jan: 1/31 files, 2.7% of bytes</div>
+      </div>
+      <div class="step">
+        <p><strong>Compact to a 4 MB target.</strong> Bin-packing rewrites the 31 small files into fewer, larger ones. Watch which number moves and which does not.</p>
+        <div class="prompt-box good"><span class="label">★ b5.py, part 3</span>DeltaTable("trips_month").optimize.compact(target_size=4 * 1024 * 1024)
+report("OPTIMIZE (compact)")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>OPTIMIZE (compact)     JFK: 8/8 files, 100.0% of bytes | 15 Jan: 1/8 files, 12.9% of bytes</div>
+      </div>
+      <div class="step">
+        <p><strong>Z-order on the zone, then count JFK.</strong> Same target size, but the rows are sorted by <code>pu_zone</code> before they are written. The final DuckDB count is the check that skipping changed the cost and not the answer.</p>
+        <div class="prompt-box good"><span class="label">★ b5.py, part 4</span>DeltaTable("trips_month").optimize.z_order(["pu_zone"], target_size=4 * 1024 * 1024)
+report("ZORDER BY (pu_zone)")
+print("JFK trips:", duckdb.sql("INSTALL delta; LOAD delta; SELECT count(*) FROM delta_scan('trips_month') WHERE pu_zone = 132").fetchone()[0])</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>ZORDER BY (pu_zone)    JFK: 1/6 files, 17.9% of bytes | 15 Jan: 6/6 files, 100.0% of bytes
+JFK trips: 145240</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional): liquid clustering.</strong> Upload the January file to a volume in your workspace, then run these in a SQL cell. The table declares its clustering key, <code>OPTIMIZE</code> clusters towards it, and <code>DESCRIBE DETAIL</code> should list it under <code>clusteringColumns</code>. <code>CLUSTER BY AUTO</code> applies to Unity Catalog managed tables only. This build did not run these statements, so there is no output to compare; Free Edition is free, non-commercial and serverless only, and its limits change, so re-check its limitations page first.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, SQL cell (not run in this build)</span>CREATE TABLE your_catalog.your_schema.trips_month CLUSTER BY (pu_zone) AS
+SELECT tpep_pickup_datetime AS pickup_ts, VendorID AS vendor_id, PULocationID AS pu_zone,
+       trip_distance, fare_amount
+FROM read_files('/Volumes/your_catalog/your_schema/your_volume/yellow_tripdata_2024-01.parquet')
+WHERE tpep_pickup_datetime &gt;= '2024-01-01' AND tpep_pickup_datetime &lt; '2024-02-01';
+
+OPTIMIZE your_catalog.your_schema.trips_month;
+DESCRIBE DETAIL your_catalog.your_schema.trips_month;
+
+-- let Databricks choose the keys from your queries (UC managed tables)
+ALTER TABLE your_catalog.your_schema.trips_month CLUSTER BY AUTO;</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ Clustering on a column no query filters</span>DeltaTable("trips_month").optimize.z_order(["vendor_id"])   # nobody filters on vendor_id
+# the rewrite buys the JFK query nothing and scatters the days the daily load had grouped
+# session 8 bench, vendor branch: JFK stays at 8 of 8 files, 15 January goes from 2 of 8 to 8 of 8</div>
+
+    <div class="callout tip">
+      <p><strong>Cluster on what your heaviest queries filter, and measure files read before and after.</strong> A layout is a choice of which questions get cheap, and the wrong choice costs a full rewrite and makes other queries slower. Run a check like <code>files_read</code> on your two or three most expensive queries before and after any OPTIMIZE. The <a href="b8-the-delta-log-bench.html">Delta log bench</a> lets you try the wrong column on purpose.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 6</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Add a third query</strong> to <code>report</code>, for example <code>trip_distance</code> above 20 miles, and see which of the three layouts helps it. Explain the result from the min and max alone.</li>
+      <li><strong>Z-order on two columns</strong>, <code>["pu_zone", "pickup_ts"]</code>, from a fresh rebuild of the 31 daily files. Compare both queries with the single-column result and with the Delta paper's claim that the benefit spreads across columns.</li>
+      <li><strong>Break the contract on paper.</strong> Suppose one file's <code>max.pu_zone</code> in the log were 120 while the file really held a JFK trip. Which query would return a wrong answer, and would anything warn you?</li>
+      <li><strong>Read the commit.</strong> Open the newest JSON file in <code>trips_month/_delta_log</code> after the Z-order and find the <code>operationParameters</code>. Note what it records and what it leaves out.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 5 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · For the filter <code>pu_zone = 132</code>, when can a reader skip a file without opening it?</p>
+      <button class="qopt" type="button">A · When the file is smaller than the target size</button>
+      <button class="qopt" type="button">B · When the file's max for pu_zone is below 132 or its min is above 132</button>
+      <button class="qopt" type="button">C · When the file was written by an append rather than a MERGE</button>
+      <button class="qopt" type="button">D · When the file's numRecords is below the table average</button>
+      <p class="qwhy">The test compares the filter with the file's min and max in the log. If the range cannot contain 132, no row in the file can match, so the file is skipped. Any other file must be opened.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Compaction took the table from 31 files to 8, yet the JFK query still read 8 of 8. Why?</p>
+      <button class="qopt" type="button">A · Compaction deletes the statistics, so skipping is switched off</button>
+      <button class="qopt" type="button">B · DuckDB ignores the log after an OPTIMIZE</button>
+      <button class="qopt" type="button">C · JFK trips are too many to fit in one file</button>
+      <button class="qopt" type="button">D · Each compacted file still holds trips from every zone, so every pu_zone range includes 132</button>
+      <p class="qwhy">Bin-packing joins files; it does not sort rows. The new files cover a few days each and still span the whole city, so the statistics cannot rule any of them out. Z-order on pu_zone took the same query to 1 of 6.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · What does Databricks recommend for new tables, and why does the laptop path use Z-order instead?</p>
+      <button class="qopt" type="button">A · Liquid clustering with CLUSTER BY; delta-rs 1.6.6 offers Z-order but not CLUSTER BY</button>
+      <button class="qopt" type="button">B · Partitioning by date; delta-rs cannot partition</button>
+      <button class="qopt" type="button">C · Z-order on every column; liquid clustering is only for streaming tables</button>
+      <button class="qopt" type="button">D · No layout at all; predictive optimization makes clustering unnecessary</button>
+      <p class="qwhy">Databricks recommends liquid clustering for all new tables, including streaming tables and materialized views, with at most four keys. The laptop library cannot run it, so the build-along uses Z-order; the skipping mechanism underneath is the same min and max check.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Per-file statistics, tightBounds, truncation, and clustered-table metadata (domainMetadata, clusteringProvider)</span><span class="note">Delta Lake, "Delta Transaction Log Protocol" (PROTOCOL.md), github.com/delta-io/delta, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Statistics defaults, OPTIMIZE, liquid clustering rules, runtime versions and the recommendation</span><span class="note">Databricks documentation, docs.databricks.com ("Data skipping", "OPTIMIZE", "Liquid clustering"), read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Z-order versus a single sort, Figure 5</span><span class="note">Armbrust, M., Das, T., Sun, L., et al. (2020). "Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores." PVLDB 13(12): 3411-3424, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Min-max statistics enable skipping when the data is clustered</span><span class="note">Armbrust, M., Ghodsi, A., Xin, R., Zaharia, M. (2021). "Lakehouse." CIDR 2021, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every printed output in the build-along</span><span class="note">Run in this build with deltalake 1.6.6 and DuckDB 1.5.6 on the NYC TLC yellow taxi file for January 2024</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The 500 TB table that skipped 93 percent</span><span class="note">Reported by the Delta Lake paper's authors about their customer; not independently measured</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition SQL, the two team stories and the figure shapes</span><span class="note">The SQL was not run in this build; the stories are constructed; file shapes and ranges in the figures are schematic, the counts are run</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Read iff ranges overlap</b><span>Open a file unless max &lt; lo or min &gt; hi. The log decides; no data file is touched.</span></div>
+      <div class="cheat-item"><b>32 columns by default</b><span>UC external tables; tune with dataSkippingNumIndexedCols or dataSkippingStatsColumns.</span></div>
+      <div class="cheat-item"><b>Compaction is not clustering</b><span>31 files to 8, and JFK still read 8 of 8.</span></div>
+      <div class="cheat-item"><b>Z-order trades questions</b><span>JFK 1 of 6 files; 15 January went from 1 of 8 to 6 of 6.</span></div>
+      <div class="cheat-item"><b>Liquid for new tables</b><span>CLUSTER BY, at most 4 keys; AUTO on UC managed tables. delta-rs has Z-order only.</span></div>
+      <div class="cheat-item"><b>Measure files read</b><span>Before and after every OPTIMIZE, on your heaviest queries.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Tonight decided which files a query opens. Session 6 asks the question that comes before it: who may read these files at all. You model Unity Catalog's three-key rule, USE CATALOG, USE SCHEMA and SELECT, and see why a grant on a schema reaches tables that do not exist yet.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 5 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b4-merge-and-change-data.html">← Prev: MERGE and change data</a> &nbsp;·&nbsp; <a href="b6-unity-catalog-grants.html">Next: Unity Catalog grants →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

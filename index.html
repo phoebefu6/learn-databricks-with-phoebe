@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Fourteen sessions on Databricks and the lakehouse: what a lakehouse is, Delta tables and their transaction log, time travel, MERGE and change data, data skipping and clustering, Unity Catalog, notebooks versus jobs, what DBUs cost, and MLflow, ending on a bench that replays a real Delta log in your browser. Free, by Phoebe Fu.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Databricks: Lakehouse for Data &amp; AI">
+<meta property="og:description" content="A real Delta log over 8,000 NYC taxi trips, replayed in your browser. Cluster by pickup zone: a JFK query reads 2 of 8 files. Cluster by vendor: 8 of 8. Shuffle the stats: 0 of 358 rows.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Databricks: Lakehouse for Data &amp; AI">
+<meta name="twitter:description" content="Delta, Unity Catalog, DBUs and MLflow, with a bench that replays a real Delta log in the browser.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Databricks: Lakehouse for Data &amp; AI - Learn with Phoebe</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+<style>
+
+  .stats-row { display: flex; gap: 2.4rem; margin-top: 1.5rem; flex-wrap: wrap; }
+  .stat b { display: block; font-size: 2.1rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .72rem; opacity: 1; text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+
+  .course-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .course-card {
+    border: 1px solid var(--hairline);
+    border-top: 4px solid var(--diff, var(--indigo));
+    border-radius: var(--radius);
+    padding: 1.2rem 1.3rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--ink);
+    background: #fff;
+    transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+    position: relative;
+  }
+  .course-card:hover { border-color: var(--indigo-soft); border-top-color: var(--diff, var(--indigo)); box-shadow: 0 8px 28px rgba(var(--shadow-rgb),.16); transform: translateY(-3px); }
+  .course-card .cicon { font-size: 1.7rem; line-height: 1; }
+  .course-card .cnum { font-size: .72rem; font-weight: 700; color: var(--indigo); text-transform: uppercase; letter-spacing: .1em; }
+  .course-card h3 { font-size: 1.05rem; font-weight: 800; line-height: 1.3; }
+  .course-card p { font-size: .85rem; color: var(--muted); flex: 1; }
+  .course-card .meta { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+  .diff-legend { display: flex; gap: 1rem; margin-top: 1.6rem; font-size: .74rem; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+  .diff-legend i { display: inline-block; width: .85rem; height: .35rem; border-radius: 999px; margin-right: .35rem; vertical-align: middle; }
+
+  .paths { margin-top: 2.6rem; }
+  .paths h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .3rem; }
+  .paths .plede { color: var(--muted); font-size: .92rem; margin-bottom: .8rem; }
+  .path { display: flex; gap: .55rem; align-items: center; padding: .75rem 0; border-bottom: .5px solid var(--hairline); flex-wrap: wrap; }
+  .path:last-child { border-bottom: none; }
+  .path b { min-width: 15.5rem; font-size: .9rem; }
+  .path .pstep { background: var(--indigo-50); color: var(--indigo); border-radius: 999px; padding: .16rem .68rem; font-weight: 700; font-size: .8rem; text-decoration: none; transition: all .12s ease; }
+  .path .pstep:hover { background: var(--indigo); color: #fff; }
+  .path .parr { color: var(--muted); font-weight: 700; }
+
+  .mm-section { margin-top: 1.6rem; }
+  .mm-section h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .2rem; }
+  .mm-section .mm-lede { color: var(--muted); font-size: .92rem; margin-bottom: .4rem; }
+  .mm-wrap { border: 1px solid var(--hairline); border-radius: var(--radius); background: linear-gradient(180deg, #fff, var(--indigo-50)); padding: .6rem; overflow-x: auto; }
+  .mm-svg { width: 100%; height: auto; display: block; max-width: 60rem; margin: 0 auto; min-width: 34rem; }
+  .mm-link { cursor: pointer; text-decoration: none; }
+  .mm-node rect { transition: opacity .15s ease, filter .15s ease; }
+  .mm-node text { pointer-events: none; }
+  .mm-link:hover .mm-node rect { filter: brightness(1.06); }
+  .mm-edge { transition: opacity .15s ease; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn with Phoebe · Data Engineering</div>
+    <h1>Databricks: <span class="accent">Lakehouse for Data &amp; AI</span></h1>
+    <p class="sub">A lakehouse keeps one copy of the data as open files and puts a transaction log on top that every engine trusts. Six leader sessions explain that idea and what it costs, without code: Delta tables that remember, Unity Catalog, notebooks versus jobs, the arithmetic of DBUs, and when a lakehouse beats a warehouse. Eight analyst sessions build every piece by hand on real New York taxi trips, on a laptop with no account or in Databricks Free Edition, and end on a bench that replays a real Delta log in your browser. Cluster the files by pickup zone and a JFK query reads 2 of 8 files. Cluster them by vendor and it still reads 8.</p>
+    <div class="stats-row">
+      <div class="stat"><b data-count="14">14</b><span>sessions, two tracks</span></div>
+      <div class="stat"><b data-count="8000">8,000</b><span>real taxi trips on the bench</span></div>
+      <div class="stat"><b data-count="37">37</b><span>real commits replayed live</span></div>
+      <div class="stat"><b data-count="0">0</b><span>accounts needed for the laptop path</span></div>
+      <div class="stat"><b data-count="45">45</b><span>min per session</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>Leader track 🧭 <span style="font-size:.85rem;font-weight:600;color:var(--muted)">· six sessions, no code</span></h2>
+      <p class="plede">For data and AI leaders, architects and whoever signs the platform bill. What a lakehouse is, what Delta remembers, how Unity Catalog decides access, where notebooks end and jobs begin, what a DBU costs, and how to choose between a lakehouse and a warehouse.</p>
+    </div>
+
+    <div class="course-grid">
+      <a class="course-card" href="courses/a1-what-a-lakehouse-is.html" style="--diff:#34D399">
+        <span class="cicon">🏠</span>
+        <span class="cnum">Leader session 1 · start here</span>
+        <h3>What a lakehouse is</h3>
+        <p>Three generations of data platform read from the 2021 paper that named the lakehouse, the four problems of keeping data twice, and the open questions its own authors listed.</p>
+        <span class="meta"><span class="pill amber">▶ Start here</span></span>
+      </a>
+      <a class="course-card" href="courses/a2-a-table-that-remembers.html" style="--diff:#FBBF24">
+        <span class="cicon">🕰️</span>
+        <span class="cnum">Leader session 2</span>
+        <h3>Delta: a table that remembers</h3>
+        <p>Versions, history and time travel, the 30-day and 7-day retention defaults, and why VACUUM and RESTORE are governance decisions rather than engineering details.</p>
+      </a>
+      <a class="course-card" href="courses/a3-unity-catalog-governance.html" style="--diff:#FBBF24">
+        <span class="cicon">🗝️</span>
+        <span class="cnum">Leader session 3</span>
+        <h3>Unity Catalog: who may see what</h3>
+        <p>One namespace for tables, volumes and models, the three keys every read needs, inheritance that reaches tables not yet created, and owners versus managers.</p>
+      </a>
+      <a class="course-card" href="courses/a4-notebooks-vs-jobs.html" style="--diff:#FBBF24">
+        <span class="cicon">📒</span>
+        <span class="cnum">Leader session 4</span>
+        <h3>Notebooks versus jobs</h3>
+        <p>Interactive work and automated work on different compute, Lakeflow Jobs as tasks in a graph, and the checklist that turns a notebook into something that runs at 2am.</p>
+      </a>
+      <a class="course-card" href="courses/a5-what-dbus-cost.html" style="--diff:#FB923C">
+        <span class="cicon">💸</span>
+        <span class="cnum">Leader session 5</span>
+        <h3>What a DBU costs</h3>
+        <p>The unit Databricks bills in, read from real list prices: the same five machines cost $3.53 an hour as all-purpose compute and $2.59 as a job.</p>
+      </a>
+      <a class="course-card" href="courses/a6-lakehouse-or-warehouse.html" style="--diff:#FB923C">
+        <span class="cicon">⚖️</span>
+        <span class="cnum">Leader session 6</span>
+        <h3>Lakehouse or warehouse?</h3>
+        <p>The paper's case, its vendor benchmark read honestly, and a decision tree for your own copy map: when one copy of open files wins, and when it does not.</p>
+        <span class="meta"><span class="pill amber">the leader capstone</span></span>
+      </a>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>Analyst track 🔬 <span style="font-size:.85rem;font-weight:600;color:var(--muted)">· eight sessions, one real dataset</span></h2>
+      <p class="plede">Python on the NYC TLC yellow taxi trips for January 2024. Every build-along runs on a laptop with the open-source deltalake package, DuckDB and polars, and shows the same move in Databricks Free Edition.</p>
+    </div>
+
+    <div class="course-grid">
+      <a class="course-card" href="courses/b1-delta-tables-by-hand.html" style="--diff:#34D399">
+        <span class="cicon">🧱</span>
+        <span class="cnum">Analyst session 1 · start here</span>
+        <h3>Delta tables by hand</h3>
+        <p>Build a two-version table from 77,033 real trips, read it with DuckDB, polars and pandas, and watch it refuse a write that would break it.</p>
+        <span class="meta"><span class="pill amber">▶ Start here</span></span>
+      </a>
+      <a class="course-card" href="courses/b2-the-transaction-log.html" style="--diff:#FBBF24">
+        <span class="cicon">📜</span>
+        <span class="cnum">Analyst session 2</span>
+        <h3>Reading the transaction log</h3>
+        <p>Every action in the JSON, the statistics inside each add, what a remove leaves behind, checkpoints, and a short replay that agrees with delta-rs at every version.</p>
+      </a>
+      <a class="course-card" href="courses/b3-time-travel-and-restore.html" style="--diff:#FBBF24">
+        <span class="cicon">⏪</span>
+        <span class="cnum">Analyst session 3</span>
+        <h3>Time travel and restore</h3>
+        <p>Query any version, read the history, restore with a new commit, then run VACUUM with the safety off and watch an old version become unreadable.</p>
+      </a>
+      <a class="course-card" href="courses/b4-merge-and-change-data.html" style="--diff:#FB923C">
+        <span class="cicon">🔀</span>
+        <span class="cnum">Analyst session 4</span>
+        <h3>MERGE and change data</h3>
+        <p>Apply a change feed with one MERGE, read it back from the change data feed, and meet the two traps: a duplicated source row and a NULL flag.</p>
+      </a>
+      <a class="course-card" href="courses/b5-data-skipping-and-clustering.html" style="--diff:#FB923C">
+        <span class="cicon">🗂️</span>
+        <span class="cnum">Analyst session 5</span>
+        <h3>Data skipping, OPTIMIZE and clustering</h3>
+        <p>Min and max per file decide what a query reads. On the whole month, 2,964,606 trips: JFK costs 31 of 31 files, then 1 of 6 after Z-order.</p>
+      </a>
+      <a class="course-card" href="courses/b6-unity-catalog-grants.html" style="--diff:#FB923C">
+        <span class="cicon">🔐</span>
+        <span class="cnum">Analyst session 6</span>
+        <h3>Unity Catalog grants</h3>
+        <p>GRANT and SHOW GRANTS as Databricks implements them, with a local model of the read rule you can run anywhere to see why SELECT alone is not enough.</p>
+      </a>
+      <a class="course-card" href="courses/b7-mlflow-on-databricks.html" style="--diff:#F87171">
+        <span class="cicon">🧪</span>
+        <span class="cnum">Analyst session 7</span>
+        <h3>MLflow on Databricks</h3>
+        <p>Track two tip models, register the better one, give it the alias @champion, and load it by alias; then the Unity Catalog names and privileges that change on Databricks.</p>
+      </a>
+      <a class="course-card" href="courses/b8-the-delta-log-bench.html" style="--diff:#F87171">
+        <span class="cicon">🎛️</span>
+        <span class="cnum">Analyst session 8</span>
+        <h3>The Delta log bench</h3>
+        <p>A real Delta log over 8,000 trips, replayed in the browser: time travel, data skipping on your own predicate, two clustering choices and a break button.</p>
+        <span class="meta"><span class="pill amber">🔒 the capstone</span></span>
+      </a>
+    </div>
+
+    <div class="diff-legend">
+      <span><i style="background:#34D399"></i>start here</span>
+      <span><i style="background:#FBBF24"></i>foundations</span>
+      <span><i style="background:#FB923C"></i>hands-on</span>
+      <span><i style="background:#F87171"></i>advanced and capstone</span>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="paths">
+      <h2>Choose your path 🗺️</h2>
+      <p class="plede">Three doors into the same platform. Each track starts at its own session 1, because "a table is a folder with a log" is what makes the rest make sense.</p>
+      <div class="path"><b>💼 I sign off on the platform</b>
+        <a class="pstep" href="courses/a1-what-a-lakehouse-is.html">L1</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/a5-what-dbus-cost.html">L5</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/a6-lakehouse-or-warehouse.html">L6</a>
+        <span style="font-size:.82rem;color:var(--muted)">the idea, the bill, the decision</span>
+      </div>
+      <div class="path"><b>🛡️ I own data governance</b>
+        <a class="pstep" href="courses/a2-a-table-that-remembers.html">L2</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/a3-unity-catalog-governance.html">L3</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/b6-unity-catalog-grants.html">A6</a>
+        <span style="font-size:.82rem;color:var(--muted)">retention, access, and the grants that implement them</span>
+      </div>
+      <div class="path"><b>🔬 I build on the lakehouse</b>
+        <a class="pstep" href="courses/b1-delta-tables-by-hand.html">A1</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/b2-the-transaction-log.html">A2</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/b5-data-skipping-and-clustering.html">A5</a>
+        <span class="parr">→</span>
+        <a class="pstep" href="courses/b8-the-delta-log-bench.html">A8</a>
+        <span style="font-size:.82rem;color:var(--muted)">from a folder on your laptop to a replayed log</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>Your passport 🎫</h2>
+      <p class="plede">Clear all three quiz questions in a session and it gets stamped. Fourteen stamps across both tracks, and they live in this browser only.</p>
+    </div>
+    <div class="pp-strip"></div>
+  </section>
+
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>What is real here 🧾</h2>
+      <p class="plede">A lakehouse is a promise about which files are true. These pages keep the same promise about their own numbers.</p>
+    </div>
+    <table class="clean">
+      <tr><th>Claim</th><th>Status</th></tr>
+      <tr><td>The trips</td><td>Real. The NYC Taxi and Limousine Commission's public yellow taxi file for January 2024, 2,964,624 rows, downloaded with no login</td></tr>
+      <tr><td>The bench's Delta log</td><td>Real. Written by the open-source deltalake package, version 1.6.6, over 8,000 sampled trips in 37 declared commits, and shipped unedited</td></tr>
+      <tr><td>Every file count, byte share and row count on the bench</td><td>Replayed in your browser; an independent Python run using delta-rs's own file lists agrees on all 370 checks</td></tr>
+      <tr><td>Every laptop output in the analyst sessions</td><td>Printed by running the code shown, with the versions pinned on each page</td></tr>
+      <tr><td>Free Edition steps</td><td>Described from Databricks documentation, not run; each one is labelled</td></tr>
+      <tr><td>DBU prices</td><td>Real list prices for Azure Databricks Premium in East US, read from Microsoft's public price API on 3 October 2026; other clouds and regions differ</td></tr>
+      <tr><td>The 12 January re-send and the file size</td><td>Constructed and scaled: a retry made up to give the MERGE a realistic job, and 28 KB files so 8,000 rows make several files</td></tr>
+    </table>
+  </section>
+
+  <section class="section mm-section">
+    <h2>The knowledge map 🧠</h2>
+    <p class="mm-lede">Both tracks at a glance - hover a session to spotlight its concepts, click any node to jump in.</p>
+    <div class="mm-wrap"><div id="mindmap"></div></div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span>Neighbours on the shelf: <a href="https://phoebefu6.github.io/learn-aws-with-phoebe/">AWS for Data &amp; AI Teams ↗</a> &nbsp;·&nbsp; <a href="https://phoebefu6.github.io/learn-data-warehouse-with-phoebe/">Data Warehouse ↗</a> &nbsp;·&nbsp; <a href="https://phoebefu6.github.io/learn-data-engineering-with-phoebe/">Data Engineering ↗</a></span>
+  </footer>
+
+</main>
+
+<script>
+window.MINDMAP_DATA = {
+  "title": "Databricks\nLakehouse",
+  "centerColor": "#9E0B00",
+  "sessions": [
+    {
+      "label": "Lakehouse",
+      "href": "courses/a1-what-a-lakehouse-is.html",
+      "concepts": [
+        {
+          "label": "Three generations",
+          "href": "courses/a1-what-a-lakehouse-is.html"
+        },
+        {
+          "label": "The metadata layer",
+          "href": "courses/a1-what-a-lakehouse-is.html"
+        },
+        {
+          "label": "Open questions",
+          "href": "courses/a1-what-a-lakehouse-is.html"
+        }
+      ]
+    },
+    {
+      "label": "Remembers",
+      "href": "courses/a2-a-table-that-remembers.html",
+      "concepts": [
+        {
+          "label": "Versions and history",
+          "href": "courses/a2-a-table-that-remembers.html"
+        },
+        {
+          "label": "Retention defaults",
+          "href": "courses/a2-a-table-that-remembers.html"
+        }
+      ]
+    },
+    {
+      "label": "Unity Catalog",
+      "href": "courses/a3-unity-catalog-governance.html",
+      "concepts": [
+        {
+          "label": "Three keys to read",
+          "href": "courses/a3-unity-catalog-governance.html"
+        },
+        {
+          "label": "Inheritance",
+          "href": "courses/a3-unity-catalog-governance.html"
+        }
+      ]
+    },
+    {
+      "label": "Notebooks, jobs",
+      "href": "courses/a4-notebooks-vs-jobs.html",
+      "concepts": [
+        {
+          "label": "Compute types",
+          "href": "courses/a4-notebooks-vs-jobs.html"
+        },
+        {
+          "label": "Promote a notebook",
+          "href": "courses/a4-notebooks-vs-jobs.html"
+        }
+      ]
+    },
+    {
+      "label": "DBUs",
+      "href": "courses/a5-what-dbus-cost.html",
+      "concepts": [
+        {
+          "label": "Two bills",
+          "href": "courses/a5-what-dbus-cost.html"
+        },
+        {
+          "label": "Idle is expensive",
+          "href": "courses/a5-what-dbus-cost.html"
+        }
+      ]
+    },
+    {
+      "label": "Decision",
+      "href": "courses/a6-lakehouse-or-warehouse.html",
+      "concepts": [
+        {
+          "label": "Vendor benchmarks",
+          "href": "courses/a6-lakehouse-or-warehouse.html"
+        },
+        {
+          "label": "Decision tree",
+          "href": "courses/a6-lakehouse-or-warehouse.html"
+        }
+      ]
+    },
+    {
+      "label": "By hand",
+      "href": "courses/b1-delta-tables-by-hand.html",
+      "concepts": [
+        {
+          "label": "Folder plus log",
+          "href": "courses/b1-delta-tables-by-hand.html"
+        },
+        {
+          "label": "Schema enforcement",
+          "href": "courses/b1-delta-tables-by-hand.html"
+        }
+      ]
+    },
+    {
+      "label": "The log",
+      "href": "courses/b2-the-transaction-log.html",
+      "concepts": [
+        {
+          "label": "Add and remove",
+          "href": "courses/b2-the-transaction-log.html"
+        },
+        {
+          "label": "Checkpoints",
+          "href": "courses/b2-the-transaction-log.html"
+        }
+      ]
+    },
+    {
+      "label": "Time travel",
+      "href": "courses/b3-time-travel-and-restore.html",
+      "concepts": [
+        {
+          "label": "RESTORE commits",
+          "href": "courses/b3-time-travel-and-restore.html"
+        },
+        {
+          "label": "VACUUM ends history",
+          "href": "courses/b3-time-travel-and-restore.html"
+        }
+      ]
+    },
+    {
+      "label": "MERGE, CDF",
+      "href": "courses/b4-merge-and-change-data.html",
+      "concepts": [
+        {
+          "label": "Upsert in one commit",
+          "href": "courses/b4-merge-and-change-data.html"
+        },
+        {
+          "label": "Change data feed",
+          "href": "courses/b4-merge-and-change-data.html"
+        }
+      ]
+    },
+    {
+      "label": "Skipping",
+      "href": "courses/b5-data-skipping-and-clustering.html",
+      "concepts": [
+        {
+          "label": "Min/max per file",
+          "href": "courses/b5-data-skipping-and-clustering.html"
+        },
+        {
+          "label": "Liquid clustering",
+          "href": "courses/b5-data-skipping-and-clustering.html"
+        }
+      ]
+    },
+    {
+      "label": "Grants",
+      "href": "courses/b6-unity-catalog-grants.html",
+      "concepts": [
+        {
+          "label": "GRANT on securables",
+          "href": "courses/b6-unity-catalog-grants.html"
+        }
+      ]
+    },
+    {
+      "label": "MLflow",
+      "href": "courses/b7-mlflow-on-databricks.html",
+      "concepts": [
+        {
+          "label": "Aliases, not stages",
+          "href": "courses/b7-mlflow-on-databricks.html"
+        }
+      ]
+    },
+    {
+      "label": "The bench",
+      "href": "courses/b8-the-delta-log-bench.html",
+      "concepts": [
+        {
+          "label": "Replay the log",
+          "href": "courses/b8-the-delta-log-bench.html"
+        },
+        {
+          "label": "Break the stats",
+          "href": "courses/b8-the-delta-log-bench.html"
+        }
+      ]
+    }
+  ]
+};
+</script>
+<script src="assets/app.js?v=1"></script>
+<script src="assets/mindmap.js?v=1"></script>
+</body>
+</html>

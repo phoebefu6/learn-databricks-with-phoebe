@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 8 of 8. A real _delta_log, written by delta-rs over 8,000 real NYC taxi trips through 37 commits, replayed in your browser. Pick a version and a predicate: the bench shows which files are live, which ones data skipping reads, and whether the answer is still right when the min/max stats lie.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The Delta log bench - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 8 of 8. Z-order by pickup zone: the JFK query reads 2 of 8 files. Z-order by vendor: still 8 of 8, and the date query gets worse. Shuffle the stats: 0 of 358 rows.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b8-the-delta-log-bench.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Delta log bench - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 8 of 8. A real Delta log replayed in the browser: time travel, data skipping, and a break button.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 8 · The Delta log bench - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 8 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 8 of 8</div>
+    <h1>The Delta log <span class="accent">bench</span></h1>
+    <p class="sub">Everything the analyst track built by hand comes together on one real table. 8,000 real New York taxi trips from January 2024 went through 37 commits, written by delta-rs: a load per day, a MERGE, a DELETE, an OPTIMIZE, and two different Z-order rewrites. The bench in this page holds the <code>_delta_log</code> those commits produced and replays it in your browser exactly as the Delta protocol tells a reader to. Pick a version and it rebuilds the live file set. Write a predicate and it shows which files data skipping reads, how many bytes that is, and whether the answer matches a full scan. Then press the break button and watch a fast answer become a wrong one.</p>
+    <div class="chip-row">
+      <span class="chip level">🔴 Bench night</span>
+      <span class="chip audience">Bring sessions 2, 3 and 5</span>
+      <span class="chip audience">No code tonight, all clicking</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:3">3-14 · How the table was built</span>
+      <span class="a3" style="flex:6">14-40 · Versions, predicates, the break</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">A bench is a fixed table and a fixed set of questions, so that when two layouts give two answers the layout is the only thing that changed. The rows are real: a seeded sample of 8,000 trips from the TLC's public January 2024 yellow taxi file. The log is real: every JSON line was written by the open-source <code>deltalake</code> package, version 1.6.6, and nothing in it was edited. Two things are scaled or constructed, and the widget says so: files target 28 KB so that 8,000 rows make several files, and the re-sent 12 January batch in the MERGE is a retry made up for the lesson.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">real = replayed from the log delta-rs wrote</span>
+      <span class="pill">the break button = the same stats, dealt to the wrong files</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> The habit of asking two questions of any Delta table: "which files are live at the version I am reading?" and "which of them does my filter actually read?", plus three measured facts to argue with: clustering on the column you filter turns 8 of 8 files into 2 of 8, clustering on a column nobody filters buys nothing and costs the date query, and statistics that lie give a fast wrong answer with no error.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers how the table was built</span>
+      <h2>Thirty-seven commits, declared in advance</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">The sequence was fixed before any number was looked at, so nothing was tuned to make a point. Each box below is one JSON file in <code>_delta_log</code>. From version 33 the table was copied twice, so the two version 34 commits are two answers to the same question: which column should the files be clustered by?</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 270" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The commit sequence of the bench table. Versions 0 to 30: one append per pickup day, 31 files. Version 31: MERGE, 31 late trips inserted and 270 re-sent trips matched, still 31 files. Version 32: DELETE of 113 voided trips, 30 files rewritten into 8, leaving 9, and a checkpoint is written. Version 33: OPTIMIZE compaction, 8 files. Then two copies: version 34 Z-ordered by pu_zone, 8 files; and version 34 Z-ordered by vendor_id, 8 files, followed by version 35, a RESTORE to version 33.">
+        <defs>
+          <filter id="b8aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="81" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b8aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b8aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b8aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b8aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b8aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b8aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b8aV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .b8aR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .b8aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b8aH" x="30" y="26">37 COMMITS, TWO BRANCHES FROM VERSION 33</text>
+
+        <g filter="url(#b8aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="60" width="170" height="100" rx="8" transform="rotate(-0.6 115 110)" fill="url(#b8aHc)"/>
+          <rect x="222" y="60" width="150" height="100" rx="8" transform="rotate(0.5 297 110)" fill="#FFFFFF"/>
+          <rect x="394" y="60" width="150" height="100" rx="8" transform="rotate(-0.4 469 110)" fill="#FFFFFF"/>
+          <rect x="566" y="60" width="132" height="100" rx="8" transform="rotate(0.5 632 110)" fill="#FFF5F3"/>
+          <rect x="722" y="40" width="150" height="78" rx="8" transform="rotate(-0.6 797 79)" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="722" y="138" width="150" height="86" rx="8" transform="rotate(0.5 797 181)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="394" y="178" width="150" height="28" rx="6" transform="rotate(0.8 469 192)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M204 110 L216 110" marker-end="url(#b8aAr)"/>
+          <path d="M376 110 L388 110" marker-end="url(#b8aAr)"/>
+          <path d="M548 110 L560 110" marker-end="url(#b8aAr)"/>
+          <path d="M702 100 C712 100 708 80 716 80" marker-end="url(#b8aAr)"/>
+          <path d="M702 120 C712 120 708 178 716 178" marker-end="url(#b8aAr)"/>
+        </g>
+
+        <rect x="38" y="70" width="154" height="58" rx="6" fill="#FFFFFF"/>
+        <text class="b8aH" x="46" y="88">v0 to v30 · WRITE</text>
+        <text class="b8aS" x="46" y="106">one append per day</text>
+        <text class="b8aS" x="46" y="122">store-and-forward held</text>
+        <text class="b8aV" x="46" y="150">31 files</text>
+
+        <text class="b8aH" x="236" y="88">v31 · MERGE</text>
+        <text class="b8aS" x="236" y="106">31 late trips in</text>
+        <text class="b8aS" x="236" y="122">270 re-sent matched</text>
+        <text class="b8aV" x="236" y="150">31 files</text>
+
+        <text class="b8aH" x="408" y="88">v32 · DELETE</text>
+        <text class="b8aS" x="408" y="106">113 voided trips</text>
+        <text class="b8aS" x="408" y="122">30 files rewritten</text>
+        <text class="b8aV" x="408" y="150">9 files</text>
+        <text class="b8aB" x="408" y="197">checkpoint written here</text>
+
+        <text class="b8aH" x="578" y="88">v33 · OPTIMIZE</text>
+        <text class="b8aS" x="578" y="106">compaction</text>
+        <text class="b8aS" x="578" y="122">dataChange false</text>
+        <text class="b8aV" x="578" y="150">8 files</text>
+
+        <text class="b8aH" x="734" y="62">v34 · by pu_zone</text>
+        <text class="b8aS" x="734" y="80">ZORDER, 8 files</text>
+        <text class="b8aS" x="734" y="98">the column we filter</text>
+
+        <text class="b8aH" x="734" y="160">v34 · by vendor_id</text>
+        <text class="b8aR" x="734" y="178">nobody filters on it</text>
+        <text class="b8aS" x="734" y="196">v35 RESTORE to 33</text>
+        <text class="b8aS" x="734" y="212">a new commit</text>
+
+        <text class="b8aN" x="30" y="248">Live rows: 8,000 after the MERGE, 7,887 after the DELETE. No later commit adds or removes a single row.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber tag is the one shortcut a reader takes: from version 32 on, the snapshot starts at the checkpoint instead of at version 0</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Five decisions, stated once<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Real rows, sampled once.</strong> 8,000 trips drawn uniformly from the 2,964,606 January pickups with seed 20240101 and numbered 1 to 8,000 in pickup order. The trip id is ours; the TLC file has none.</p>
+        <p><strong>One append per pickup day,</strong> the way a nightly load writes, so each early file holds exactly one day. Trips with <code>store_and_fwd_flag = 'Y'</code>, which the cab kept in memory because it had no connection, were held back: 31 of them.</p>
+        <p><strong>The MERGE</strong> inserts those 31 late trips and matches a re-sent copy of all 270 trips from 12 January. The re-send is constructed, an uploader retry, and it is there because a retried batch is the most common reason a MERGE runs at all. Matching on <code>trip_id</code> means the retry adds no duplicates.</p>
+        <p><strong>The DELETE</strong> removes the 113 trips with a fare below zero, which in the TLC data are voided or refunded records. It touched 30 of the 31 files, because voided trips happen on almost every day.</p>
+        <p><strong>Files are scaled down.</strong> 28 KB per file, set as <code>delta.targetFileSize</code> and as the OPTIMIZE target, so 8,000 rows make 8 files after compaction. Real tables aim for much larger files; the mechanism is the same at any size.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the replay does, in four rules<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The engine in this page follows the "Action Reconciliation" section of the Delta protocol. Read the commits in version order. An <code>add</code> makes a file live, a <code>remove</code> turns it into a tombstone, the latest <code>protocol</code> and <code>metaData</code> win, and a <code>cdc</code> action points at change data, never at table data. From version 32 on it starts from the checkpoint delta-rs wrote and reads only the commits after it, then checks that a replay of every commit from version 0 gives the same live files. It always does; the line under the break button says so for the version you are on.</p>
+        <p>Before any number here was written down, the same replay was run in Python against delta-rs's own file list for every version of both branches, and against a full read of the table for every preset question: 370 checks, no disagreement.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="bench">
+    <div class="section-kicker">
+      <span class="klabel">Build-along · the bench</span>
+      <h2>Versions, predicates and the break button</h2>
+      <span class="tag demo">★ 26 min · the main event</span>
+    </div>
+    <p class="lede">Work through the four moves below in order. Each one is a question you answered by hand in an earlier session; tonight the answer comes from the real log in front of you.</p>
+
+    <div id="dbx-log-bench"></div>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Time travel.</strong> Drag the version slider from 0 to 34 with the JFK preset on. Watch the live file count climb by one a day to 31, hold at 31 through the MERGE, fall to 9 at the DELETE and 8 at the OPTIMIZE. Say out loud why version 31 still has 31 files when it added 31 trips: the MERGE removed one file and added one.</p>
+        <div class="prompt-box good"><span class="label">★ What to read off the commit line</span>v31  MERGE     1 add, 1 remove, 1 cdc   31 live files
+v32  DELETE    8 add, 30 remove, 1 cdc  9 live files
+v33  OPTIMIZE  1 add, 2 remove, dataChange false  8 live files</div>
+      </div>
+      <div class="step">
+        <p><strong>Data skipping on the daily layout.</strong> At version 30, run "Picked up on 15 January", then "Picked up at JFK Airport". The date query reads 1 of 31 files and 2.7 percent of the bytes, because one file holds one day and the stats say so. The JFK query reads 31 of 31: every day has some JFK pickups.</p>
+      </div>
+      <div class="step">
+        <p><strong>Cluster, then cluster wrong.</strong> Move to version 34 with "Z-order by pu_zone": JFK drops to 2 of 8 files and 26.5 percent of bytes, and 15 January rises to 8 of 8. Switch to "Z-order by vendor_id": JFK stays at 8 of 8, and 15 January is still 8 of 8. Then slide to 35 and watch RESTORE give the version 33 layout back.</p>
+        <div class="prompt-box good"><span class="label">★ The ladder, as the bench prints it</span>                      JFK          15 January
+v30  31 daily files   31 of 31     1 of 31
+v33  compacted        8 of 8       2 of 8
+v34  by pu_zone       2 of 8       8 of 8
+v34  by vendor_id     8 of 8       8 of 8</div>
+      </div>
+      <div class="step">
+        <p><strong>Break it.</strong> On version 34 by pu_zone with JFK selected, press the break button. The same eight min/max pairs are dealt to the wrong files. The query still reads 2 files, still runs fast, and returns 0 of the 358 JFK trips a full scan finds. Then try your own predicate with the break on, and find one where the answer survives by luck.</p>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Read it in this order.</strong> Files read, then share of bytes, then the two row counts side by side. A skipping result is only good news when the last two numbers match; the bench prints both so that a fast answer can never hide a wrong one.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers what layout does to skipping</span>
+      <h2>Clustering chooses which question gets cheap</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">Data skipping reads a file unless its min and max prove it holds no match. So the work skipping saves depends entirely on how tightly each file's values are bunched for the column in the filter. The bench measures that for two questions across four layouts.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Share of bytes read, by layout, for two queries. 31 daily files: JFK 100.0 percent, 15 January 2.7 percent. Compacted at version 33: JFK 100.0, 15 January 25.7. Z-ordered by pu_zone: JFK 26.5, 15 January 100.0. Z-ordered by vendor_id: JFK 100.0, 15 January 100.0.">
+        <defs>
+          <filter id="b8bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="83" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .b8bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b8bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b8bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b8bW { font: 800 11px Inter, sans-serif; fill: #FFFFFF; }
+          .b8bK { font: 800 11px Inter, sans-serif; fill: #1B3139; }
+          .b8bR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .b8bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b8bH" x="30" y="26">SHARE OF BYTES READ, BY LAYOUT</text>
+        <text class="b8bS" x="300" y="26">dark bar = JFK (pu_zone = 132) · pale bar = picked up on 15 January</text>
+
+        <g filter="url(#b8bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M260 50 L260 290" stroke="#C4CFD3"/>
+          <path d="M740 50 L740 290" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="260" y="58" width="480" height="20" rx="3" fill="#9E0B00" stroke="#9E0B00"/>
+          <rect x="260" y="82" width="13" height="20" rx="3" fill="#FFB4A9" stroke="#E00F00"/>
+          <rect x="260" y="118" width="480" height="20" rx="3" fill="#9E0B00" stroke="#9E0B00"/>
+          <rect x="260" y="142" width="123" height="20" rx="3" fill="#FFB4A9" stroke="#E00F00"/>
+          <rect x="260" y="178" width="127" height="20" rx="3" fill="#9E0B00" stroke="#9E0B00"/>
+          <rect x="260" y="202" width="480" height="20" rx="3" fill="#FFB4A9" stroke="#E00F00"/>
+          <rect x="260" y="238" width="480" height="20" rx="3" fill="#FEF2F2" stroke="#991B1B"/>
+          <rect x="260" y="262" width="480" height="20" rx="3" fill="#FEF2F2" stroke="#991B1B"/>
+        </g>
+
+        <text class="b8bL" x="240" y="84" text-anchor="end">v30 · 31 daily files</text>
+        <text class="b8bL" x="240" y="144" text-anchor="end">v33 · compacted, 8 files</text>
+        <text class="b8bL" x="240" y="204" text-anchor="end">v34 · by pu_zone</text>
+        <text class="b8bR" x="240" y="264" text-anchor="end">v34 · by vendor_id</text>
+
+        <text class="b8bW" x="272" y="72">100.0% · 31 of 31 files</text>
+        <text class="b8bK" x="283" y="96">2.7% · 1 of 31</text>
+        <text class="b8bW" x="272" y="132">100.0% · 8 of 8</text>
+        <text class="b8bK" x="272" y="156">25.7% · 2 of 8</text>
+        <text class="b8bK" x="397" y="192">26.5% · 2 of 8</text>
+        <text class="b8bK" x="272" y="216">100.0% · 8 of 8</text>
+        <text class="b8bR" x="272" y="252">100.0% · 8 of 8</text>
+        <text class="b8bR" x="272" y="276">100.0% · 8 of 8</text>
+        <text class="b8bS" x="744" y="304" text-anchor="end">100% = every byte</text>
+
+        <text class="b8bN" x="30" y="326">Same 7,887 rows from v33 on. Every bar is a count the bench prints; the Python reference agrees on each.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the two red rows are the anti-lever: clustering on a column no query filters buys nothing for JFK and gives away the date query</figcaption>
+    </figure>
+
+    <table class="clean">
+      <tr><th>Layout</th><th>JFK (pu_zone = 132)</th><th>15 January</th><th>trip_distance &gt; 20</th><th>JFK, 22 to 28 January</th></tr>
+      <tr><td>v30 · 31 daily files</td><td>31 of 31 · 100.0%</td><td>1 of 31 · 2.7%</td><td>27 of 31 · 86.6%</td><td>7 of 31 · 23.3%</td></tr>
+      <tr><td>v33 · compacted</td><td>8 of 8 · 100.0%</td><td>2 of 8 · 25.7%</td><td>8 of 8 · 100.0%</td><td>3 of 8 · 38.5%</td></tr>
+      <tr><td><strong>v34 · by pu_zone</strong></td><td><strong>2 of 8 · 26.5%</strong></td><td>8 of 8 · 100.0%</td><td>7 of 8 · 90.1%</td><td>2 of 8 · 26.5%</td></tr>
+      <tr><td>v34 · by vendor_id</td><td>8 of 8 · 100.0%</td><td>8 of 8 · 100.0%</td><td>8 of 8 · 100.0%</td><td>8 of 8 · 100.0%</td></tr>
+    </table>
+    <p class="mono" style="margin-top:6px">Files read and share of bytes, honest stats. Rows found equal the full-scan count in every cell: 358, 186, 74 and 64 trips from v33 on.</p>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Finding 1: the daily load was already a layout<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Nobody chose to cluster the table by date, yet at version 30 the date query reads one file in 31. Appending one day at a time put each day in its own file, so the <code>pickup_ts</code> min and max of each file are one day apart. Compaction keeps most of that order, which is why 15 January still costs only 2 of 8 files at version 33. Every table has a layout; the only question is whether anyone chose it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Finding 2: clustering trades one question for another<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Z-ordering by <code>pu_zone</code> sorts the trips by zone before writing, so each file covers a narrow band of zones: 4 to 88, 88 to 132, 132 to 142, and so on. JFK falls in two files because 132 sits on a boundary, and the query reads 26.5 percent of the bytes. The same rewrite scatters the days across all eight files, so the date query that cost 2 files now costs 8. A layout is a decision about which questions get cheap. Session 5 showed the same trade on the whole month: 1 file of 6 for JFK, 6 of 6 for the date.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Finding 3: the multi-column answer, and what Databricks recommends now<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Z-order on several columns exists to soften that trade. In the Delta Lake paper's own test, a single sort let one column skip 99 percent of 100 objects and the other three skip nothing, while Z-order on all four skipped between 44 and 67 percent on each, 54 percent on average against 25. For new tables Databricks now recommends liquid clustering instead of Z-order: <code>CLUSTER BY</code> up to four keys, reclustered incrementally by <code>OPTIMIZE</code>, and, on Unity Catalog managed tables, <code>CLUSTER BY AUTO</code> lets predictive optimization pick the keys from the queries it sees. The skipping it enables is the same min/max mechanism this bench measures; delta-rs offers Z-order, not <code>CLUSTER BY</code>, so the bench stays with Z-order.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the anti-lever and the break button</span>
+      <h2>Fast, and wrong</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Data skipping is safe because of one promise: a file's min and max really bound its values. The break button keeps every statistic and only deals them to the wrong files, using the same fixed shuffle in Python and in the browser. Nothing about the query looks different. The answer is.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before and after at version 34, Z-ordered by pu_zone, query pu_zone = 132. Honest stats: the file whose stats say 88 to 132 holds 270 JFK trips and the file whose stats say 132 to 142 holds 88; both are read and all 358 are found. Shuffled stats: those two files now carry stats 4 to 88 and 162 to 209, so both are skipped; two other files now claim 132 to 142 and 88 to 132, are read, and hold none. The query reads 2 files and returns 0 of 358.">
+        <defs>
+          <filter id="b8cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="89" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .b8cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b8cR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b8cL { font: 600 11px Inter, sans-serif; fill: #1B3139; }
+          .b8cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b8cV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .b8cX { font: 800 18px Inter, sans-serif; fill: #991B1B; }
+          .b8cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b8cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="40" width="390" height="200" rx="12" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="450" y="40" width="390" height="200" rx="12" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="60" y="72" width="170" height="44" rx="6" transform="rotate(-1 145 94)" fill="#FFFFFF" stroke="#E00F00" stroke-width="3"/>
+          <rect x="245" y="72" width="170" height="44" rx="6" transform="rotate(1 330 94)" fill="#FFFFFF" stroke="#E00F00" stroke-width="3"/>
+          <rect x="60" y="128" width="170" height="44" rx="6" transform="rotate(0.8 145 150)" fill="#FFFFFF" stroke="#C4CFD3"/>
+          <rect x="245" y="128" width="170" height="44" rx="6" transform="rotate(-0.8 330 150)" fill="#FFFFFF" stroke="#C4CFD3"/>
+          <rect x="470" y="72" width="170" height="44" rx="6" transform="rotate(-1 555 94)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="655" y="72" width="170" height="44" rx="6" transform="rotate(1 740 94)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="470" y="128" width="170" height="44" rx="6" transform="rotate(0.8 555 150)" fill="#FFFFFF" stroke="#E00F00" stroke-width="3"/>
+          <rect x="655" y="128" width="170" height="44" rx="6" transform="rotate(-0.8 740 150)" fill="#FFFFFF" stroke="#E00F00" stroke-width="3"/>
+        </g>
+
+        <text class="b8cH" x="58" y="62">✓ Honest stats</text>
+        <text class="b8cR" x="468" y="62">✗ Same stats, wrong files</text>
+        <text class="b8cL" x="70" y="91">says 88 to 132 · read</text>
+        <text class="b8cS" x="70" y="107">holds 270 JFK trips</text>
+        <text class="b8cL" x="255" y="91">says 132 to 142 · read</text>
+        <text class="b8cS" x="255" y="107">holds 88 JFK trips</text>
+        <text class="b8cL" x="70" y="147">six more files</text>
+        <text class="b8cS" x="70" y="163">skipped, rightly</text>
+        <text class="b8cL" x="255" y="147">no JFK inside</text>
+        <text class="b8cS" x="255" y="163">nothing missed</text>
+        <text class="b8cL" x="480" y="91">says 4 to 88 · skipped</text>
+        <text class="b8cS" x="480" y="107">holds 270 JFK trips</text>
+        <text class="b8cL" x="665" y="91">says 162 to 209 · skip</text>
+        <text class="b8cS" x="665" y="107">holds 88 JFK trips</text>
+        <text class="b8cL" x="480" y="147">says 132 to 142 · read</text>
+        <text class="b8cS" x="480" y="163">holds none</text>
+        <text class="b8cL" x="665" y="147">says 88 to 132 · read</text>
+        <text class="b8cS" x="665" y="163">holds none</text>
+        <text class="b8cV" x="58" y="218">358 of 358</text>
+        <text class="b8cS" x="170" y="218">2 files read, every match found</text>
+        <text class="b8cX" x="468" y="218">0 of 358</text>
+        <text class="b8cS" x="560" y="218">2 files read, no error raised</text>
+
+        <text class="b8cN" x="40" y="276">The fix is not a smarter query. It is a guarantee that stats are written by the same commit that writes the file.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the right panel reads as many files as the left and finishes as fast; only the full-scan count shows it is wrong</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The anti-lever, stated with its nuance<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Clustering by <code>vendor_id</code> is a real OPTIMIZE that rewrites all eight files, costs the same compute as the useful one, and changes nothing for any query here: <code>vendor_id</code> has only three values in the whole month, so sorting by it leaves every file spanning nearly every zone and every day. It does not make the JFK query slower; it leaves it at 8 of 8. It does make the date query slower, 2 of 8 to 8 of 8, because it threw away the order the daily loads had given for free. That is the honest size of the mistake: wasted work plus one lost advantage, not a disaster. RESTORE at version 35 undoes it with a new commit, and the bench shows the version 33 file set returning.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What the break button proves, and where it cannot bite<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>With the stats shuffled, JFK at version 34 by zone returns 0 of 358, 15 January at version 33 returns 0 of 186, and the JFK week at version 30 returns 16 of 66. Each result arrives as fast as the honest one. Now look at JFK at version 33, or anything on the vendor branch: the break changes nothing, because those queries already read every file. Lying statistics can only hurt where skipping is doing work, which is exactly where you are relying on it.</p>
+        <p>In a real Delta table the stats are written into the same <code>add</code> action as the file, in the same atomic commit, so they cannot drift apart this way. They can be missing, and then the file is simply read, or wide rather than tight, which is still safe to skip on. The break button is a demonstration of why that guarantee matters, not a common failure.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A 500 TB table that reads 7 percent.</strong> The Delta Lake paper describes an information security team that queries network flow data by source address, destination address and time, looking for one address among millions. Indexes over multi-petabyte data were too expensive, so they Z-ordered the files on several fields and let min/max skipping do the work. On a 500 TB traffic table, the authors report, those queries skipped 93 percent of the data. The figure is the vendor's own, from a customer case; the mechanism is the one in front of you.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before you close the laptop</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Find a predicate that reads one file</strong> at version 34 by pu_zone, using your own row on the bench, and one that reads one file at version 30. Write down why each layout favours it.</li>
+      <li><strong>Find a predicate the break cannot hurt</strong> and one it makes wrong at the same version. Explain the difference in one sentence using the word "skipped".</li>
+      <li><strong>Count tombstones.</strong> Slide to version 33 and read the tombstone count on the commit line. Those are the files VACUUM may delete after the retention period, and the versions time travel loses when it does: connect it to session 3.</li>
+      <li><strong>Write the clustering note for one real table you own:</strong> the two filters that matter most, the column you would cluster by, and the query that will get slower because of it.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 8 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · At version 31 the table has 31 live files, the same as at version 30, although the MERGE inserted 31 late trips. What happened in the log?</p>
+      <button class="qopt" type="button">A · Nothing was written, because the count did not change</button>
+      <button class="qopt" type="button">B · The late trips were appended into an existing file in place</button>
+      <button class="qopt" type="button">C · The commit removed one file and added one rewritten file holding the matched and inserted rows, plus a change data file</button>
+      <button class="qopt" type="button">D · The MERGE failed and was retried</button>
+      <p class="qwhy">Parquet files are never edited. A MERGE writes new files and records them with <code>add</code>, records the files they replace with <code>remove</code>, and the change data feed gets its own <code>cdc</code> action. The live count can stay flat while the table changes.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Z-ordering by vendor_id rewrote all eight files. Why did the JFK query not improve, and why did the 15 January query get worse?</p>
+      <button class="qopt" type="button">A · Sorting by vendor leaves every file spanning nearly every zone, so JFK's min/max check still passes everywhere; and the rewrite scattered the days the daily loads had kept together</button>
+      <button class="qopt" type="button">B · Z-order only works on string columns</button>
+      <button class="qopt" type="button">C · The vendor branch has fewer rows</button>
+      <button class="qopt" type="button">D · OPTIMIZE deletes the statistics</button>
+      <p class="qwhy">Skipping can only use the column in the filter. Clustering on a column nobody filters makes no file narrower for the questions people ask, and any rewrite can destroy an order that was already helping.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · With the stats shuffled, JFK at version 34 by zone reads 2 files and returns 0 of 358. JFK at version 33 still returns 358 of 358. What explains the difference?</p>
+      <button class="qopt" type="button">A · Version 33 has a checkpoint and version 34 does not</button>
+      <button class="qopt" type="button">B · The shuffle is random each time</button>
+      <button class="qopt" type="button">C · Version 33 has more rows</button>
+      <button class="qopt" type="button">D · At version 33 every file's stats span zones 4 to 265, so the query reads all 8 files whatever stats they carry; lying stats only hurt where skipping actually skips</button>
+      <p class="qwhy">The shuffle is fixed (the same seed in Python and the browser). A query that reads every file cannot be misled by statistics; one that relies on them to skip can. That is why stats are written in the same atomic commit as their file.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every file count, byte share and row count on the bench</span><span class="note">Replayed in the browser from the _delta_log delta-rs 1.6.6 wrote over 8,000 real NYC TLC trips (January 2024); a Python reference using delta-rs's own file lists agrees on all 370 checks</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Action reconciliation, add and remove, tombstones, checkpoints, per-file statistics</span><span class="note">Delta Lake, "Delta Transaction Log Protocol" (PROTOCOL.md), read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Z-order and min/max skipping, Figure 5, the 500 TB case</span><span class="note">Armbrust et al., "Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores", PVLDB 2020; the 93 percent figure is the authors' customer report</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Liquid clustering recommended for new tables, CLUSTER BY AUTO, four keys</span><span class="note">Databricks documentation, "Use liquid clustering for tables", read at source</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">File size and the re-sent batch</span><span class="note">Scaled (28 KB files) and constructed (the 12 January retry); both stated on the widget</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 8 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Two questions, every table</b><span>Which files are live at this version? Which of them does my filter read?</span></div>
+      <div class="cheat-item"><b>Files never change</b><span>MERGE, DELETE, OPTIMIZE: remove old files, add new ones, one commit.</span></div>
+      <div class="cheat-item"><b>Daily loads are a layout</b><span>15 January: 1 of 31 files at v30, before anyone chose to cluster.</span></div>
+      <div class="cheat-item"><b>Cluster what you filter</b><span>By pu_zone: JFK 2 of 8. By vendor_id: 8 of 8, and the date query lost.</span></div>
+      <div class="cheat-item"><b>Fast is not right</b><span>Shuffled stats: 2 files read, 0 of 358 rows, no error.</span></div>
+      <div class="cheat-item"><b>New tables: liquid</b><span>Databricks recommends CLUSTER BY over ZORDER for new tables.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>That is the end of the analyst track. The natural next step is leader session 6, lakehouse or warehouse, which takes what you measured tonight, one copy of real data, cheap time travel and skipping that depends on layout, and asks when that design beats a warehouse and when it does not.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 8 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b7-mlflow-on-databricks.html">← Prev: MLflow on Databricks</a> &nbsp;·&nbsp; <a href="../index.html">Course home</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/dbx-bench-data.js?v=1"></script>
+<script src="../assets/dbx-bench.js?v=2"></script>
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

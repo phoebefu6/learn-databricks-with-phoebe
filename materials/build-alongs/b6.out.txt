@@ -1,0 +1,11 @@
+1. denied, missing USE CATALOG, USE SCHEMA, SELECT
+GRANT SELECT ON TABLE main.taxi.trips TO `analysts`
+2. denied, missing USE CATALOG, USE SCHEMA
+GRANT USE CATALOG ON CATALOG main TO `analysts`
+GRANT USE SCHEMA ON SCHEMA main.taxi TO `analysts`
+3. can read
+GRANT SELECT ON SCHEMA main.taxi TO `finance`
+GRANT USE CATALOG ON CATALOG main TO `finance`
+GRANT USE SCHEMA ON SCHEMA main.taxi TO `finance`
+4. can read
+5. denied, missing SELECT

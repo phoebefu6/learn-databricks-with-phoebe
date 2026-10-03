@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Leader session 1 of 6. What a lakehouse is, read from the 2021 paper that named it: why the two-tier lake plus warehouse became the default, the four problems its authors say it causes, and the one design move that defines a lakehouse: a transaction layer over open files in cheap storage.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="What a lakehouse is - learn databricks with phoebe">
+<meta property="og:description" content="Leader session 1 of 6. One copy of the data, a layer that keeps promises about it, and every engine reading the same files. Read from the CIDR 2021 paper, with its own open questions.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/a1-what-a-lakehouse-is.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="What a lakehouse is - learn databricks with phoebe">
+<meta name="twitter:description" content="Leader session 1 of 6. Three generations of data platform, and the design move that defines the third.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Leader session 1 · What a lakehouse is - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Leader session 1 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Leader track · Session 1 of 6</div>
+    <h1>What a <span class="accent">lakehouse</span> is</h1>
+    <p class="sub">Most companies keep their data twice: once as files in a cheap lake, and again, cleaned and loaded, in a warehouse that answers the dashboards. In 2021 four of Databricks' founders wrote a paper arguing that this two-copy design would wither, and named what should replace it. Tonight we read that paper the way a leader should: what problem it says the two copies cause, what a lakehouse actually is once the marketing is removed, and which questions the authors themselves left open.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Start here</span>
+      <span class="chip audience">Data and AI leaders, architects, managers</span>
+      <span class="chip audience">No code</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Three generations, one layer</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: map your copies</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Databricks sells a platform; the idea underneath it is older and simpler. Keep one copy of the data as ordinary open files in cloud storage, add a thin layer that records which files make up each version of each table, and let every engine, SQL for the dashboards and Python for the models, read those same files. The six leader sessions work up from that idea to the decision of whether it fits your organisation. The eight analyst sessions build every piece of it by hand on real New York taxi trips, and end on a bench that replays a real table's history in the browser.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-page map of where your organisation's data is copied, how many hops each copy is from its source and who waits on each hop, plus the one sentence that separates a lakehouse from a lake with a new name: "one copy, in an open format, with a transaction log that every engine trusts."</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the three generations</span>
+      <h2>How the data ended up in two places</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">The paper, "Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics", by Michael Armbrust, Ali Ghodsi, Reynold Xin and Matei Zaharia (CIDR 2021), tells the history in three generations. Each one fixed the previous one's biggest problem and created a new one.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 336" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three generations of data platform side by side. First generation: operational databases loaded by ETL into one warehouse that serves BI and reports; one copy, structured data only. Second generation, two-tier: everything lands in a data lake, then a second ETL step loads a subset into a warehouse for BI, while data science and machine learning read the lake; two copies and two hops. Lakehouse: everything lands once in the lake, a metadata, caching and indexing layer sits on top, and BI, data science and machine learning all read through it; one copy.">
+        <defs>
+          <filter id="a1aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a1aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="a1aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a1aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a1aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a1aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a1aW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .a1aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a1aV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .a1aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="a1aH" x="30" y="26">1 · FIRST GENERATION</text>
+        <text class="a1aH" x="320" y="26">2 · TWO-TIER: LAKE + WAREHOUSE</text>
+        <text class="a1aH" x="610" y="26">3 · LAKEHOUSE</text>
+
+        <g filter="url(#a1aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- gen 1 -->
+          <rect x="40" y="226" width="220" height="40" rx="6" transform="rotate(-0.5 150 246)" fill="#FFFFFF"/>
+          <rect x="40" y="136" width="220" height="44" rx="6" transform="rotate(0.5 150 158)" fill="#FFF5F3"/>
+          <rect x="40" y="50" width="220" height="40" rx="6" transform="rotate(-0.4 150 70)" fill="#FFFFFF"/>
+          <path d="M150 222 L150 186" marker-end="url(#a1aAr)"/>
+          <path d="M150 132 L150 96" marker-end="url(#a1aAr)"/>
+          <!-- gen 2 -->
+          <rect x="330" y="226" width="220" height="40" rx="6" transform="rotate(0.4 440 246)" fill="url(#a1aHc)"/>
+          <rect x="330" y="136" width="104" height="44" rx="6" transform="rotate(-0.8 382 158)" fill="#FFF5F3"/>
+          <rect x="330" y="50" width="104" height="40" rx="6" transform="rotate(0.6 382 70)" fill="#FFFFFF"/>
+          <rect x="446" y="50" width="104" height="40" rx="6" transform="rotate(-0.6 498 70)" fill="#FFFFFF"/>
+          <path d="M382 222 L382 186" marker-end="url(#a1aAr)"/>
+          <path d="M382 132 L382 96" marker-end="url(#a1aAr)"/>
+          <path d="M498 222 L498 96" marker-end="url(#a1aAr)"/>
+          <!-- gen 3 -->
+          <rect x="620" y="226" width="220" height="40" rx="6" transform="rotate(-0.4 730 246)" fill="url(#a1aHc)"/>
+          <rect x="620" y="136" width="220" height="44" rx="6" transform="rotate(0.5 730 158)" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="620" y="50" width="220" height="40" rx="6" transform="rotate(-0.5 730 70)" fill="#FFFFFF"/>
+          <path d="M730 222 L730 186" marker-end="url(#a1aAr)"/>
+          <path d="M730 132 L730 96" marker-end="url(#a1aAr)"/>
+        </g>
+
+        <rect x="348" y="236" width="184" height="22" rx="4" fill="#FFFFFF"/>
+        <rect x="638" y="236" width="184" height="22" rx="4" fill="#FFFFFF"/>
+        <text class="a1aL" x="52" y="251">operational databases</text>
+        <text class="a1aL" x="52" y="163">warehouse</text>
+        <text class="a1aS" x="140" y="163">ETL, schema first</text>
+        <text class="a1aL" x="52" y="75">BI and reports</text>
+        <text class="a1aV" x="52" y="290">1 copy</text>
+        <text class="a1aS" x="110" y="290">structured only</text>
+
+        <text class="a1aL" x="356" y="251">data lake: all files</text>
+        <text class="a1aL" x="340" y="163">warehouse</text>
+        <text class="a1aL" x="340" y="75">BI, reports</text>
+        <text class="a1aL" x="456" y="75">data science</text>
+        <text class="a1aS" x="506" y="160">ML reads</text>
+        <text class="a1aS" x="506" y="174">the lake</text>
+        <text class="a1aV" x="340" y="290">2 copies</text>
+        <text class="a1aS" x="420" y="290">2 ETL hops</text>
+
+        <text class="a1aL" x="646" y="251">data lake: open files</text>
+        <text class="a1aW" x="632" y="156">metadata, caching</text>
+        <text class="a1aW" x="632" y="172">and indexing layer</text>
+        <text class="a1aL" x="632" y="75">BI · data science · ML</text>
+        <text class="a1aV" x="632" y="290">1 copy</text>
+        <text class="a1aS" x="694" y="290">every engine, same files</text>
+
+        <text class="a1aN" x="30" y="320">Redrawn from Figure 1 of the CIDR 2021 paper. The red layer is the whole idea; everything else already existed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the lakehouse keeps the lake's single cheap copy and moves the warehouse's promises into a layer on top of it</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Generation one and two, in the paper's words<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>First generation:</strong> operational data was loaded into a central warehouse with the schema decided up front, ready for business intelligence. Two things broke it, the paper says: compute and storage were sold together in an appliance, so you paid for peak load, and more and more data was video, audio and text that a warehouse could not hold at all.</p>
+        <p><strong>Second generation:</strong> land everything as files in a data lake, first on Hadoop and from 2015 on cloud object stores such as S3, ADLS and GCS, and load a subset into a warehouse for the important dashboards. The authors write that this two-tier design is "used at virtually all Fortune 500 enterprises", in their experience. Note who is speaking: the founders of a company that sells the alternative. It is a reasonable description of the industry, and it is also the setup for their argument.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The four problems the paper names<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Reliability:</strong> keeping two systems consistent takes continuous ETL, and every step can introduce bugs, for example when the lake engine and the warehouse engine disagree on a subtle rule. <strong>Staleness:</strong> the warehouse lags the lake, often by days. The paper cites a Dimensional Research and Fivetran survey in which 86 percent of analysts use out-of-date data and 62 percent wait on engineering several times a month; that survey was not read for this session, so treat those two numbers as reported. <strong>Limited advanced analytics:</strong> TensorFlow, PyTorch and XGBoost do not run well on a warehouse, so teams export files, which the authors call a third ETL step. <strong>Total cost of ownership:</strong> two copies of storage, continuous ETL, and proprietary formats that make leaving expensive.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The third ETL step.</strong> A retailer's demand-forecasting team needs three years of order lines. They live in the warehouse, so a weekly job exports them back out to files in the lake, where the training code can read them. The model now trains on data that went source, lake, warehouse, lake: three hops, three schedules, three places a definition can drift. The paper's point is not that this team did anything wrong. It is that the architecture made the round trip the only option.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the definition</span>
+      <h2>Open files, plus a layer that keeps promises</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Strip the branding and the definition is one sentence long. The paper defines a lakehouse as "a data management system based on low-cost and directly-accessible storage that also provides traditional analytical DBMS management and performance features such as ACID transactions, data versioning, auditing, indexing, caching, and query optimization."</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An adds-stack. Bottom: cheap object storage holding open Parquet files that any engine could read but that make no promises. Middle: a transaction log layer, for Databricks the Delta Lake log, which adds four things: which files form each table version, atomic commits, per-file statistics, and an audit history. Top: engines reading the same files through that layer: SQL for BI, Python and Spark for data science, and ML training. A bracket on the right says: equals a lakehouse.">
+        <defs>
+          <filter id="a1bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="a1bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .a1bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a1bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .a1bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a1bW { font: 800 12px Inter, sans-serif; fill: #FFFFFF; }
+          .a1bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a1bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a1bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="60" y="30" width="700" height="44" rx="8" transform="rotate(-0.3 410 52)" fill="#FFFFFF"/>
+          <rect x="60" y="150" width="700" height="52" rx="8" transform="rotate(0.3 410 176)" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="60" y="218" width="700" height="44" rx="8" transform="rotate(-0.2 410 240)" fill="url(#a1bHc)"/>
+          <rect x="60" y="94" width="160" height="34" rx="6" transform="rotate(-1.5 140 111)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="240" y="94" width="160" height="34" rx="6" transform="rotate(1.2 320 111)" fill="#FFF5F3"/>
+          <rect x="420" y="94" width="160" height="34" rx="6" transform="rotate(-1 500 111)" fill="#FFF5F3"/>
+          <rect x="600" y="94" width="160" height="34" rx="6" transform="rotate(1.4 680 111)" fill="#FFF5F3"/>
+          <path d="M790 34 L806 34 L806 258 L790 258"/>
+        </g>
+
+        <text class="a1bL" x="78" y="57">engines: SQL for BI · Python and Spark for data science · ML training</text>
+        <text class="a1bB" x="74" y="115">which files = v42</text>
+        <text class="a1bL" x="254" y="115">atomic commits</text>
+        <text class="a1bL" x="434" y="115">per-file statistics</text>
+        <text class="a1bL" x="614" y="115">audit history</text>
+        <text class="a1bW" x="78" y="174">transaction log layer</text>
+        <text class="a1bW" x="78" y="192">on Databricks: the Delta Lake log, governed by Unity Catalog</text>
+        <rect x="74" y="228" width="420" height="24" rx="4" fill="#FFFFFF"/>
+        <text class="a1bL" x="82" y="245">object storage: open Parquet files, cheap, no promises</text>
+        <text class="a1bH" x="816" y="150">=</text>
+        <text class="a1bH" x="816" y="166">lake</text>
+        <text class="a1bH" x="816" y="182">house</text>
+
+        <text class="a1bN" x="60" y="288">The amber chip is the one promise every other one rests on: a single answer to "which files are the table right now?"</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the files never change; what changes is the layer's record of which files count</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What the layer adds, and what it gives up<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The paper's first key idea is to store data as standard files in an object store and put "a transactional metadata layer on top" that "defines which objects are part of a table version". Delta Lake, Apache Iceberg and Apache Hudi are such layers. Because the layer decides which files are in the table, it can make writes atomic, keep old versions, enforce a schema, hold statistics for skipping files, and check permissions before anyone touches the files.</p>
+        <p>The authors are explicit about the price: direct access means giving up "some aspects of data independence", the old database promise that the storage format is private and can change freely. In a lakehouse the file format is part of the public interface, because every engine reads it. That is what makes it open, and it is what makes it hard to optimise the way a closed warehouse can.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Where Databricks sits in the definition<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Databricks is one company's product built on the idea: Delta Lake as the open table format, Unity Catalog as the governance layer (session 3), and managed compute for notebooks, jobs and SQL (sessions 4 and 5). The idea is broader than the product. The general thesis across vendors, and how other platforms answer it, is covered in <a href="https://phoebefu6.github.io/learn-ai-infra-with-phoebe/courses/b5-lakehouse-engine.html">the lakehouse engine session of the AI infrastructure course</a>; the warehouse side of the story lives in <a href="https://phoebefu6.github.io/learn-data-warehouse-with-phoebe/">the data warehouse course</a>.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers what the paper left open</span>
+      <h2>The questions its own authors asked</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">A founding paper that lists its own open questions is worth more than a brochure that lists none. Three of them matter to a leader choosing a platform today, and one of them the analyst bench measures directly.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 270" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three open questions as three panels. Speed without a private format: the paper proposes caching, per-file statistics and data layout; on the analyst bench, clustering the files by pickup zone cut a JFK query from 8 of 8 files to 2 of 8. The log lives in the object store: simple and highly available, but it limits transactions per second. One table at a time: Delta, Iceberg and Hudi transact on a single table, so a change across two tables is not atomic.">
+        <defs>
+          <filter id="a1cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .a1cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .a1cL { font: 600 11px Inter, sans-serif; fill: #1B3139; }
+          .a1cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a1cV { font: 800 18px Inter, sans-serif; fill: #9E0B00; }
+          .a1cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a1cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a1cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="30" width="260" height="190" rx="10" transform="rotate(-0.5 160 125)" fill="#FFF5F3" stroke="#E00F00"/>
+          <rect x="310" y="30" width="260" height="190" rx="10" transform="rotate(0.4 440 125)" fill="#FFFFFF"/>
+          <rect x="590" y="30" width="260" height="190" rx="10" transform="rotate(-0.4 720 125)" fill="#FFFFFF"/>
+          <!-- skipping doodle: 8 files, 2 read -->
+          <rect x="48" y="150" width="24" height="30" rx="3" fill="#FFFFFF"/>
+          <rect x="76" y="150" width="24" height="30" rx="3" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="104" y="150" width="24" height="30" rx="3" fill="#E00F00" stroke="#9E0B00"/>
+          <rect x="132" y="150" width="24" height="30" rx="3" fill="#FFFFFF"/>
+          <rect x="160" y="150" width="24" height="30" rx="3" fill="#FFFFFF"/>
+          <rect x="188" y="150" width="24" height="30" rx="3" fill="#FFFFFF"/>
+          <rect x="216" y="150" width="24" height="30" rx="3" fill="#FFFFFF"/>
+          <rect x="244" y="150" width="24" height="30" rx="3" fill="#FFFFFF"/>
+          <!-- log in object store doodle -->
+          <path d="M330 160 L550 160" />
+          <circle cx="360" cy="160" r="7" fill="#FFAB00" stroke="#4D3200"/>
+          <circle cx="410" cy="160" r="7" fill="#FFAB00" stroke="#4D3200"/>
+          <circle cx="460" cy="160" r="7" fill="#FFAB00" stroke="#4D3200"/>
+          <circle cx="510" cy="160" r="7" fill="#FFFFFF" stroke-dasharray="3 3"/>
+          <!-- two tables doodle -->
+          <rect x="612" y="146" width="96" height="40" rx="6" fill="#FFFFFF"/>
+          <rect x="732" y="146" width="96" height="40" rx="6" fill="#FFFFFF"/>
+          <path d="M710 166 L730 166" stroke-dasharray="4 4" stroke="#991B1B"/>
+        </g>
+
+        <text class="a1cH" x="46" y="56">Speed without a private format</text>
+        <text class="a1cS" x="46" y="76">caching, per-file stats, layout</text>
+        <text class="a1cS" x="46" y="92">bench: cluster by pickup zone</text>
+        <text class="a1cV" x="46" y="124">8 of 8 → 2 of 8</text>
+        <text class="a1cS" x="46" y="206">files a JFK query must read</text>
+
+        <text class="a1cH" x="326" y="56">The log lives in the store</text>
+        <text class="a1cS" x="326" y="76">simple, highly available, no</text>
+        <text class="a1cS" x="326" y="92">extra system to run, but it</text>
+        <text class="a1cS" x="326" y="108">limits transactions per second</text>
+        <text class="a1cB" x="326" y="138">one commit = one new file</text>
+        <text class="a1cS" x="326" y="196">fine for loads, slow for</text>
+        <text class="a1cS" x="326" y="210">thousands of tiny writes</text>
+
+        <text class="a1cH" x="606" y="56">One table at a time</text>
+        <text class="a1cS" x="606" y="76">Delta, Iceberg, Hudi commit to</text>
+        <text class="a1cS" x="606" y="92">one table per transaction, so</text>
+        <text class="a1cS" x="606" y="108">a change across two tables is</text>
+        <text class="a1cS" x="606" y="124">not atomic in the 2021 design</text>
+        <text class="a1cL" x="622" y="170">orders</text>
+        <text class="a1cL" x="742" y="170">payments</text>
+
+        <text class="a1cN" x="30" y="252">All three are named as open questions in the paper itself. The first one is what analyst session 8 measures.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the left panel is the one the bench answers with real files: layout decides how much a query reads</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Speed is the hard part, and it depends on layout<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The paper calls SQL performance "perhaps the largest technical question with the Lakehouse approach" and proposes three format-independent fixes: cache hot files on local SSD, keep auxiliary data such as per-file min and max values "which enables data skipping optimizations when the base data is clustered", and choose the data layout. That last clause matters. Statistics only help if similar values sit in the same files. On the analyst bench, 8,000 real taxi trips in 8 files: a JFK query reads all 8 until the files are clustered by pickup zone, then reads 2.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The benchmark, read as a vendor benchmark<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The paper reports TPC-DS at scale factor 30,000 on clusters of 960 vCPUs: Databricks' Delta Engine ran all 99 queries in 3,302 seconds for $104 on demand, against four unnamed cloud warehouses at 2,996 to 37,283 seconds and $153 to $570. It is a benchmark run by the authors of the system that won it, against competitors they chose not to name, at settings they picked. That does not make it false; it makes it a claim to test on your own workload, which session 6 turns into a decision memo.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Map where your data is copied</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">No tools and no account. A blank page and your organisation. The point is to see your own architecture in the paper's terms: how many copies, how many hops, and which consumers would read the files directly if they could. Session 6 turns this map into a decision.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A blank copy map to fill in. Left column: sources. Middle: each place a copy lands, such as a lake folder, a warehouse schema, an exported extract. Right: consumers such as a dashboard and a model. Each arrow carries three labels to write: who owns the hop, how often it runs, and how stale the copy is when it lands. A tally at the bottom counts copies and hops. One example row is filled in.">
+        <defs>
+          <filter id="a1dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="a1dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .a1dH { font: 800 11px Inter, sans-serif; fill: #1B3139; letter-spacing: .04em; }
+          .a1dL { font: 600 11px Inter, sans-serif; fill: #1B3139; }
+          .a1dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .a1dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .a1dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#a1dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="50" width="150" height="40" rx="6" transform="rotate(-1 105 70)" fill="#FFFFFF"/>
+          <rect x="250" y="50" width="150" height="40" rx="6" transform="rotate(1 325 70)" fill="#FFF5F3"/>
+          <rect x="470" y="50" width="150" height="40" rx="6" transform="rotate(-1 545 70)" fill="#FFF5F3"/>
+          <rect x="690" y="50" width="150" height="40" rx="6" transform="rotate(1 765 70)" fill="#FFFFFF"/>
+          <path d="M184 70 L244 70" marker-end="url(#a1dAr)"/>
+          <path d="M404 70 L464 70" marker-end="url(#a1dAr)"/>
+          <path d="M624 70 L684 70" marker-end="url(#a1dAr)"/>
+          <rect x="30" y="130" width="150" height="40" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="250" y="130" width="150" height="40" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="470" y="130" width="150" height="40" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="690" y="130" width="150" height="40" rx="6" stroke="#C4CFD3" stroke-dasharray="5 4" fill="#FFFFFF"/>
+          <rect x="30" y="192" width="290" height="28" rx="6" transform="rotate(0.6 175 206)" fill="#FFAB00" stroke="#4D3200"/>
+        </g>
+
+        <text class="a1dH" x="30" y="36">SOURCE</text>
+        <text class="a1dH" x="250" y="36">COPY 1</text>
+        <text class="a1dH" x="470" y="36">COPY 2</text>
+        <text class="a1dH" x="690" y="36">CONSUMER</text>
+        <text class="a1dL" x="42" y="75">orders database</text>
+        <text class="a1dL" x="262" y="75">lake: raw/orders</text>
+        <text class="a1dL" x="482" y="75">warehouse mart</text>
+        <text class="a1dL" x="702" y="75">revenue dashboard</text>
+        <text class="a1dS" x="190" y="104">nightly</text>
+        <text class="a1dS" x="410" y="104">daily, +1 day</text>
+        <text class="a1dS" x="630" y="104">live</text>
+        <text class="a1dS" x="42" y="155">your next source</text>
+        <text class="a1dS" x="262" y="155">where it lands</text>
+        <text class="a1dS" x="482" y="155">and again?</text>
+        <text class="a1dS" x="702" y="155">who reads it</text>
+        <text class="a1dB" x="42" y="211">Tally: copies, hops, oldest lag</text>
+
+        <text class="a1dN" x="340" y="211">The first row is constructed. Every row after it is yours.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber tally is the number to bring to session 6: copies, hops, and the oldest lag on the page</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>List the five data sources your leadership asks about most.</strong> Orders, customers, product events, finance ledgers, support tickets: whatever your monthly review depends on. Write each in the left column.</p>
+      </div>
+      <div class="step">
+        <p><strong>Follow each one to every place it is copied.</strong> A lake folder, a warehouse schema, a spreadsheet extract, a feature table for a model. Each copy is a box; each arrow is a job somebody owns.</p>
+        <div class="prompt-box good"><span class="label">★ One row, fully labelled</span>orders database  -&gt;  lake raw/orders      nightly, data team, lands +8h
+                 -&gt;  warehouse mart       daily, BI team, lands +1 day
+                 -&gt;  ML extract (files)   weekly, DS team, lands +3 days
+copies: 3   hops: 3   oldest lag: 3 days</div>
+      </div>
+      <div class="step">
+        <p><strong>Label every arrow with owner, schedule and lag.</strong> The lag is how old the copy is when its consumer reads it. This is the paper's staleness problem measured in your own units.</p>
+      </div>
+      <div class="step">
+        <p><strong>Circle the consumers that need raw files.</strong> Model training, notebooks, anything in Python. In the paper's terms these are the consumers a warehouse serves worst, and they are the reason a lakehouse argument exists at all.</p>
+      </div>
+      <div class="step">
+        <p><strong>Write the tally and one sentence.</strong> "We keep N copies across M hops; the oldest copy is K days stale; the consumers who suffer most are ..." Bring it to session 6.</p>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The map that hides the problem</span>Sources -&gt; Data Platform -&gt; Insights
+(one box in the middle, no owners, no schedules, no lag)</div>
+
+    <div class="callout tip">
+      <p><strong>Count the copies before counting the cost.</strong> A platform decision made from a vendor diagram compares two pictures. A decision made from your own copy map compares two bills and two waiting times, which is what sessions 5 and 6 need.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 2</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Finish the copy map</strong> for all five sources and add the tally line.</li>
+      <li><strong>Ask one owner of a hop</strong> how they would know if their copy and the source disagreed today. If the answer is "a user would tell us", you have found the paper's reliability problem.</li>
+      <li><strong>Find one model or notebook</strong> that reads an export of warehouse data, and write down how stale that export is.</li>
+      <li><strong>Read the paper's abstract and Section 3.1,</strong> two pages, and mark the sentence you would quote to your CFO. Session 2 opens the transaction log that Section 3.1 describes.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and leader session 1 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · Which description matches the paper's definition of a lakehouse?</p>
+      <button class="qopt" type="button">A · A data warehouse that can also store images</button>
+      <button class="qopt" type="button">B · Low-cost, directly accessible storage with a layer that adds database features such as ACID transactions, versioning, indexing and caching</button>
+      <button class="qopt" type="button">C · A data lake with a new name and no other change</button>
+      <button class="qopt" type="button">D · Any platform sold by Databricks</button>
+      <p class="qwhy">The definition has two halves and both matter: open files any engine can read, and a metadata layer that gives them the guarantees a warehouse used to give. Without the layer it is a lake; without open files it is a warehouse.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · The paper says 86 percent of analysts use out-of-date data. How should a leader use that number?</p>
+      <button class="qopt" type="button">A · As a proven industry fact to put in the board deck</button>
+      <button class="qopt" type="button">B · Ignore it, since the authors work for Databricks</button>
+      <button class="qopt" type="button">C · As evidence that warehouses are always stale</button>
+      <button class="qopt" type="button">D · As a reported survey figure, cited by an interested party, worth replacing with your own measured lag from the copy map</button>
+      <p class="qwhy">The figure comes from a vendor survey quoted in a vendor-authored paper. It is not worthless and it is not proof. Your own map gives a lag you can defend.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · What does a lakehouse give up, according to its own authors?</p>
+      <button class="qopt" type="button">A · Some data independence: the file format becomes part of the public interface because every engine reads the files directly</button>
+      <button class="qopt" type="button">B · Support for SQL</button>
+      <button class="qopt" type="button">C · Cheap storage</button>
+      <button class="qopt" type="button">D · Nothing at all</button>
+      <p class="qwhy">Openness has a price. A closed warehouse can change its storage format at will to go faster; a lakehouse must keep its files readable by every engine, and win speed back through caching, statistics and layout.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Three generations, the four problems, the definition, the open questions</span><span class="note">Armbrust, Ghodsi, Xin, Zaharia, "Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics", CIDR 2021, read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The TPC-DS comparison</span><span class="note">Figure 3 of the same paper; a vendor-run benchmark, taught as a claim</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">86 percent stale, 62 percent waiting</span><span class="note">Reported: a Dimensional Research and Fivetran survey cited by the paper; the survey itself was not read</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">JFK query, 8 of 8 files to 2 of 8</span><span class="note">Measured on the analyst bench from a real Delta log over 8,000 NYC TLC trips</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The retailer's third ETL step and the copy-map example row</span><span class="note">Constructed for teaching</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Leader session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The one sentence</b><span>One copy, open format, a transaction log every engine trusts.</span></div>
+      <div class="cheat-item"><b>Two-tier pain</b><span>Reliability, staleness, weak ML support, double cost and lock-in.</span></div>
+      <div class="cheat-item"><b>The layer is the idea</b><span>It decides which files form each table version. Everything else follows.</span></div>
+      <div class="cheat-item"><b>The price</b><span>Less data independence: the file format is a public interface.</span></div>
+      <div class="cheat-item"><b>Speed comes from layout</b><span>Caching, per-file stats, clustering. JFK: 8 of 8 files to 2 of 8.</span></div>
+      <div class="cheat-item"><b>Read vendor numbers as claims</b><span>TPC-DS by the winner's authors; surveys by interested parties.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>The layer that decides which files are the table is a log of numbered commits. Session 2 opens it: why a Delta table can tell you what it looked like last Tuesday, who changed it, and why the retention settings in that log are a governance decision, not an engineering detail.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Leader session 1 of 6 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="a2-a-table-that-remembers.html">Next: Delta, a table that remembers →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

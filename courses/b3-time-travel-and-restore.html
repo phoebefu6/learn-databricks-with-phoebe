@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 3 of 8. Read any version of a real Delta table, undo a DELETE with RESTORE, and watch a forced VACUUM end time travel to the version it needed. Every output comes from running deltalake 1.6.6 on a real day of NYC taxi trips: 21,617, 77,033 and 76,103 rows at versions 0, 1 and 2.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Time travel and restore - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 3 of 8. Time travel is the log replay stopped early, RESTORE is a new commit, and VACUUM is the command that ends history. Run all three on 77,033 real taxi trips.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b3-time-travel-and-restore.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Time travel and restore - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 3 of 8. Read old versions, undo with a new commit, and see exactly which VACUUM ends which version.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 3 · Time travel and restore - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 3 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 3 of 8</div>
+    <h1>Time travel and <span class="accent">restore</span></h1>
+    <p class="sub">Your table has three versions and a log that remembers all of them. Tonight you read each one back, from the 21,617 morning trips of version 0 to the 76,103 trips left after the DELETE. Then you undo that DELETE, and find that undo does not rewind anything: it writes a fourth commit. Last, you run the one command that really does throw history away, VACUUM, with its safety catch off, and watch an old version stop working while the latest one reads fine. By the end you can say which files each version needs and which VACUUM ends which version's life.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Analysts and engineers who write Python</span>
+      <span class="chip audience">Laptop path needs no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Versions, undo, VACUUM</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: travel, restore, vacuum</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">You arrive with the <code>trips_delta</code> folder from sessions 1 and 2: version 0 wrote the morning file (call it file A), version 1 appended the afternoon (file B), and version 2 deleted the 930 trips with a negative fare, removing A and B and adding one new file, C. Session 2 rebuilt the live file list at every version by replaying the log. Tonight puts that replay to work. The laptop path runs <code>b3.py</code> with deltalake 1.6.6 and every output below is what it printed; the Free Edition path gives the same moves in SQL, labelled and not run.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = run, outputs pasted</span>
+      <span class="pill">Free Edition path = the same moves, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> The ability to read any version of a Delta table, to undo a bad change safely with a new commit, and to say exactly which VACUUM ends which version's life, proven on your own disk with a time-travel read that fails on purpose.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers time travel</span>
+      <h2>Time travel is the replay, stopped early</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Reading "version 1" does not mean finding an old copy of the table. There is no old copy. The reader replays the log from the start and stops after commit 1, and whatever files are live at that point are the table as it was. Because Delta never edits or deletes a data file when it commits, the files every earlier version needs are still sitting in the folder.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three readers on the same folder. VERSION AS OF 0 reads file A only, 21,617 rows. VERSION AS OF 1 reads files A and B, 77,033 rows. VERSION AS OF 2 reads file C only, 76,103 rows. Files A, B and C all sit in the same trips_delta folder; each version is a different subset of them.">
+        <defs>
+          <filter id="b3aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="31" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b3aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b3aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b3aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b3aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b3aV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b3aK { font: 800 16px Inter, sans-serif; fill: #1B3139; }
+          .b3aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b3aH" x="30" y="26">trips_delta/ · ONE FOLDER, THREE VERSIONS</text>
+
+        <g filter="url(#b3aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="44" width="240" height="80" rx="8" transform="rotate(-1 160 84)" fill="#FFFFFF"/>
+          <rect x="320" y="44" width="240" height="80" rx="8" transform="rotate(1 440 84)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="600" y="44" width="240" height="80" rx="8" transform="rotate(-0.8 720 84)" fill="#FFFFFF"/>
+          <rect x="40" y="196" width="240" height="56" rx="6" transform="rotate(0.8 160 224)" fill="url(#b3aHc)"/>
+          <rect x="320" y="196" width="240" height="56" rx="6" transform="rotate(-0.8 440 224)" fill="url(#b3aHc)"/>
+          <rect x="600" y="196" width="240" height="56" rx="6" transform="rotate(0.6 720 224)" fill="url(#b3aHc)"/>
+          <path d="M160 130 L160 188" marker-end="url(#b3aAr)"/>
+          <path d="M470 130 L470 188" marker-end="url(#b3aAr)"/>
+          <path d="M380 130 L236 188" marker-end="url(#b3aAr)"/>
+          <path d="M720 130 L720 188" marker-end="url(#b3aAr)"/>
+          <path d="M852 30 A11 11 0 1 1 840 14" marker-end="url(#b3aAr)"/>
+        </g>
+
+        <text class="b3aH" x="54" y="68">VERSION AS OF 0</text>
+        <text class="b3aS" x="54" y="88">replay stops after commit 0</text>
+        <text class="b3aV" x="54" y="112">21,617 rows</text>
+        <text class="b3aH" x="334" y="68">VERSION AS OF 1</text>
+        <text class="b3aB" x="334" y="88">replay stops after commit 1</text>
+        <text class="b3aK" x="334" y="112">77,033 rows</text>
+        <text class="b3aH" x="614" y="68">VERSION AS OF 2</text>
+        <text class="b3aS" x="614" y="88">A and B are tombstones now</text>
+        <text class="b3aV" x="614" y="112">76,103 rows</text>
+
+        <rect x="50" y="204" width="220" height="40" rx="4" fill="#FFFFFF"/>
+        <rect x="330" y="204" width="220" height="40" rx="4" fill="#FFFFFF"/>
+        <rect x="610" y="204" width="220" height="40" rx="4" fill="#FFFFFF"/>
+        <text class="b3aL" x="58" y="220">file A · morning</text>
+        <text class="b3aC" x="58" y="237">added v0, removed v2</text>
+        <text class="b3aL" x="338" y="220">file B · afternoon</text>
+        <text class="b3aC" x="338" y="237">added v1, removed v2</text>
+        <text class="b3aL" x="618" y="220">file C · DELETE output</text>
+        <text class="b3aC" x="618" y="237">added v2</text>
+
+        <text class="b3aN" x="30" y="288">Same folder, three answers: a version is the set of files its replay ends with, nothing more.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber reader needs two files that the latest version has already removed, and both are still on disk</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Asking for a version, on the laptop and in Databricks<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>In delta-rs you pass the version when you open the table: <code>DeltaTable("trips_delta", version=1)</code>. Tonight's run printed 21,617 rows for version 0, 77,033 for version 1 and 76,103 for version 2, the same counts session 2's hand replay produced.</p>
+        <p>In Databricks the Databricks documentation page on table history gives three spellings in SQL: <code>SELECT * FROM t VERSION AS OF 1</code>, <code>SELECT * FROM t TIMESTAMP AS OF '...'</code>, and the shorthand <code>t@v1</code> after the table name. All three are the same operation: pick a version, replay to it, read its files.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>History: the log, read newest first<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>DeltaTable.history()</code> in delta-rs and <code>DESCRIBE HISTORY</code> in Databricks both return one row per commit, newest first. Tonight's table prints <code>2 DELETE</code> with its predicate <code>fare_amount &lt; 0</code>, then <code>1 WRITE</code> with mode Append, then <code>0 WRITE</code> with mode ErrorIfExists, the default "create, or fail if it exists" mode from session 1. Each row is the <code>commitInfo</code> action you read in session 2, so history is an audit trail you get for free: who changed what, when, and with what condition.</p>
+        <p>Read history before you time travel or restore. It is the only way to know which version number you actually want.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Timestamps, checkpoints and how far back a reader may start<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Travelling by timestamp needs a reliable time for each commit. The protocol defines an In-Commit Timestamps table feature that writes the commit time inside the commit itself; this session only names it, because tonight's table travels by version number.</p>
+        <p>Session 2 wrote a checkpoint at version 2. PROTOCOL.md says that "For time travel, the checkpoint used must not be newer than the time travel version", so a reader asked for version 0 or 1 cannot start from that checkpoint and replays the JSON entries from version 0 instead. The checkpoint is a shortcut to the present, never to the past.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Files change, answers do not.</strong> Open <a href="b8-the-delta-log-bench.html">the Delta log bench</a> (analyst session 8), choose the JFK preset and drag the version slider. At v30 the JFK question finds 371 rows in 31 daily files. Then come a MERGE (v31) and a DELETE of 113 voided trips (v32), real data changes, so the count moves. At v33 OPTIMIZE rewrites the live files into 8 with <code>dataChange</code> false, and the answer is 358 rows; the bench's RESTORE back to v33 at v35 answers 358 again from the same 8 files. Time travel follows the log, not the folder, so a layout change never alters what a version contains. These are run numbers from the bench's own build.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers RESTORE</span>
+      <h2>Undo is a new commit</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The log rule from session 2 still holds: writers never overwrite or delete an existing log entry. So RESTORE cannot rewind the table by erasing commits. It works out the difference between the version you want and the version you have, and writes one new commit that removes and adds files until the live set matches. Version 2 stays in the history, exactly as it happened.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 292" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The log after b3.py as four commits in a row. v0 WRITE adds file A, live A, 21,617 rows. v1 WRITE Append adds file B, live A and B, 77,033 rows. v2 DELETE removes A and B and adds C, live C, 76,103 rows. v3 RESTORE to 1 removes C and adds A and B again, live A and B, 77,033 rows. v2 is still in the history. The RESTORE commit has dataChange true, so the docs call it a data-changing operation and streaming readers downstream see A and B arrive again.">
+        <defs>
+          <filter id="b3bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b3bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b3bC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b3bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b3bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b3bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b3bH" x="30" y="26">THE LOG AFTER b3.py · UNDO IS A NEW COMMIT</text>
+
+        <g filter="url(#b3bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="170" height="92" rx="8" transform="rotate(-1 115 90)" fill="#FFFFFF"/>
+          <rect x="250" y="44" width="170" height="92" rx="8" transform="rotate(1 335 90)" fill="#FFFFFF"/>
+          <rect x="470" y="44" width="170" height="92" rx="8" transform="rotate(-1 555 90)" fill="#FFF5F3"/>
+          <rect x="690" y="44" width="170" height="92" rx="8" transform="rotate(1 775 90)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M206 90 L242 90" marker-end="url(#b3bAr)"/>
+          <path d="M426 90 L462 90" marker-end="url(#b3bAr)"/>
+          <path d="M646 90 L682 90" marker-end="url(#b3bAr)"/>
+          <rect x="30" y="180" width="830" height="66" rx="10" transform="rotate(-0.3 445 213)" fill="url(#b3bHc)"/>
+          <path d="M866 22 C872 10 852 6 846 18" marker-end="url(#b3bAr)"/>
+        </g>
+
+        <text class="b3bH" x="42" y="66">v0 · WRITE</text>
+        <text class="b3bC" x="42" y="86">add A</text>
+        <text class="b3bS" x="42" y="106">live: A</text>
+        <text class="b3bS" x="42" y="124">21,617 rows</text>
+        <text class="b3bH" x="262" y="66">v1 · WRITE Append</text>
+        <text class="b3bC" x="262" y="86">add B</text>
+        <text class="b3bS" x="262" y="106">live: A, B</text>
+        <text class="b3bS" x="262" y="124">77,033 rows</text>
+        <text class="b3bH" x="482" y="66">v2 · DELETE</text>
+        <text class="b3bC" x="482" y="86">remove A, B · add C</text>
+        <text class="b3bS" x="482" y="106">live: C</text>
+        <text class="b3bS" x="482" y="124">76,103 rows</text>
+        <text class="b3bH" x="702" y="66">v3 · RESTORE to 1</text>
+        <text class="b3bB" x="702" y="86">remove C · add A, B</text>
+        <text class="b3bB" x="702" y="106">live: A, B</text>
+        <text class="b3bB" x="702" y="124">77,033 rows</text>
+
+        <text class="b3bS" x="482" y="160">v2 is still in the history</text>
+        <text class="b3bC" x="702" y="160">dataChange: true</text>
+
+        <rect x="42" y="188" width="806" height="50" rx="4" fill="#FFFFFF"/>
+        <text class="b3bL" x="54" y="208">What RESTORE wrote: one new commit that moves the live set back to version 1's files.</text>
+        <text class="b3bS" x="54" y="228">The docs call RESTORE "a data-changing operation": a streaming reader downstream sees A and B arrive again.</text>
+
+        <text class="b3bN" x="30" y="272">History only grows: undo appends v3, it never deletes v2.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber commit is the undo, and it sits at the end of the log, not in place of v2</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What tonight's RESTORE printed<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>dt.restore(1)</code> followed by a fresh read printed <code>after RESTORE: version 3 rows 77033</code>. Two facts in one line: the row count is back to version 1's 77,033, and the version number went up, to 3, not back to 1. If you run history now, it lists four commits with RESTORE on top.</p>
+        <p>In Databricks the same move is <code>RESTORE TABLE t TO VERSION AS OF 1</code>, or <code>TO TIMESTAMP AS OF</code> a point in time.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Why "data-changing" matters downstream<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks history documentation calls RESTORE "a data-changing operation": its commit marks the files it adds and removes with <code>dataChange</code> true, unlike session 2's checkpoint or an OPTIMIZE. Anything that follows the table commit by commit, such as a streaming job, treats the re-added files as new data and may process those rows a second time. The table is right after a RESTORE; a copy built from its changes can hold duplicates. How streaming readers handle that is the subject of <a href="https://phoebefu6.github.io/learn-streaming-data-with-phoebe/">the streaming data course</a>; on the Delta side, the rule is to check who reads the table incrementally before you restore it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The same commit at bench scale<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The bench restores its vendor branch from v34 back to v33. The v35 commit delta-rs wrote holds a <code>protocol</code> action, a <code>metaData</code> action, 8 <code>remove</code> actions and 8 <code>add</code> actions, with <code>dataChange</code> true, and the live set afterwards is the same 8 files v33 had. Notice that v34 was an OPTIMIZE with <code>dataChange</code> false, yet undoing it is a data-changing commit: RESTORE does not inherit the flag of the change it reverses.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The Friday DELETE and the Monday double count.</strong> An analyst runs a DELETE with a predicate that is too wide on Friday. On Monday a colleague spots it in <code>DESCRIBE HISTORY</code>, finds the version before it, and runs RESTORE. The table is correct within seconds. But a streaming job copies every change from that table into a reporting table, and it now sees the restored files as new rows, so the reporting table counts the same trips twice until someone rebuilds it. This team is constructed; the mechanism is the documented one, and it is why a restore deserves a message to every downstream owner.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers VACUUM and retention</span>
+      <h2>The command that ends history</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Time travel and RESTORE work because removed files stay on disk as tombstones. That costs storage, so Delta gives you VACUUM: it deletes data files that no version inside a retention window still needs. PROTOCOL.md describes it as deleting unreferenced files "after a user-specified retention period (default 7 days)". Inside the window nothing is lost. Shrink the window and you choose which versions die.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 356" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three files across four versions. File A is live at v0 and v1, removed at v2, live again at v3. File B is live at v1, removed at v2, live again at v3. File C is live only at v2 and is a tombstone at v3. With the default 7 day retention, C's tombstone is seconds old, so a dry run lists 0 files. With retention 0 and the safety check off, VACUUM deleted 1 file, C; reading version 2 then fails with FileNotFoundError, while the latest version, files A and B, still reads 77,033 rows.">
+        <defs>
+          <filter id="b3cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b3cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b3cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b3cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b3cD { font: 600 11px Inter, sans-serif; fill: #9E0B00; }
+          .b3cR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b3cV { font: 800 16px Inter, sans-serif; fill: #9E0B00; }
+          .b3cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b3cH" x="30" y="26">WHICH FILES VACUUM MAY DELETE · THE TABLE AFTER RESTORE</text>
+        <text class="b3cL" x="265" y="56" text-anchor="middle">v0 WRITE</text>
+        <text class="b3cL" x="405" y="56" text-anchor="middle">v1 Append</text>
+        <text class="b3cL" x="545" y="56" text-anchor="middle">v2 DELETE</text>
+        <text class="b3cL" x="685" y="56" text-anchor="middle">v3 RESTORE</text>
+
+        <g filter="url(#b3cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="200" y="74" width="270" height="28" rx="5" transform="rotate(-0.4 335 88)" fill="url(#b3cHc)"/>
+          <rect x="480" y="74" width="130" height="28" rx="5" transform="rotate(0.6 545 88)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="620" y="74" width="130" height="28" rx="5" transform="rotate(-0.6 685 88)" fill="url(#b3cHc)"/>
+          <rect x="340" y="114" width="130" height="28" rx="5" transform="rotate(0.6 405 128)" fill="url(#b3cHc)"/>
+          <rect x="480" y="114" width="130" height="28" rx="5" transform="rotate(-0.6 545 128)" fill="#FFFFFF" stroke="#C4CFD3" stroke-dasharray="5 4"/>
+          <rect x="620" y="114" width="130" height="28" rx="5" transform="rotate(0.6 685 128)" fill="url(#b3cHc)"/>
+          <rect x="480" y="154" width="130" height="28" rx="5" transform="rotate(0.8 545 168)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="620" y="154" width="130" height="28" rx="5" transform="rotate(-0.8 685 168)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="30" y="214" width="400" height="102" rx="10" transform="rotate(-0.4 230 265)" fill="#FFFFFF"/>
+          <rect x="450" y="214" width="410" height="102" rx="10" transform="rotate(0.4 655 265)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <path d="M846 232 L830 272"/>
+          <path d="M818 272 L842 272 L848 296 L810 296 Z"/>
+          <path d="M822 280 L820 294 M832 280 L832 294 M842 280 L844 294"/>
+        </g>
+
+        <text class="b3cL" x="30" y="92">file A · morning</text>
+        <text class="b3cL" x="30" y="132">file B · afternoon</text>
+        <text class="b3cL" x="30" y="172">file C · DELETE output</text>
+        <text class="b3cS" x="514" y="92">removed</text>
+        <text class="b3cS" x="514" y="132">removed</text>
+        <text class="b3cB" x="508" y="172">live at v2 only</text>
+        <text class="b3cD" x="650" y="172">tombstone</text>
+        <text class="b3cS" x="766" y="92">live</text>
+        <text class="b3cS" x="766" y="132">live</text>
+        <text class="b3cR" x="766" y="172">VACUUM target</text>
+
+        <text class="b3cH" x="48" y="240">Default retention: 7 days</text>
+        <text class="b3cS" x="48" y="262">C became a tombstone seconds ago, inside the window</text>
+        <text class="b3cV" x="48" y="298">dry run: 0 files</text>
+
+        <text class="b3cR" x="468" y="240">retention_hours=0, check off</text>
+        <text class="b3cL" x="468" y="262">deleted 1 file: C. Version 2 needs C.</text>
+        <text class="b3cR" x="468" y="282">read version 2: FileNotFoundError</text>
+        <text class="b3cL" x="468" y="302">latest v3 (A, B) still reads 77,033 rows</text>
+
+        <text class="b3cN" x="30" y="340">All four commits ran in one script, so every tombstone was younger than 7 days.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - C is the only file no live version needs, so it is the only one VACUUM can take, and version 2 goes with it</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The defaults, the safety check and the dry run<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks documentation gives two retention settings. <code>delta.deletedFileRetentionDuration</code>, default 7 days, is how long a tombstoned data file must be before VACUUM may delete it. <code>delta.logRetentionDuration</code>, default 30 days, is how long log entries are kept. Time travel to a version needs both its log entries and its data files, so the shorter of the two is your real horizon, and with defaults that is 7 days once VACUUM runs.</p>
+        <p>Asking for a retention shorter than the table's setting is blocked by a safety check, <code>spark.databricks.delta.retentionDurationCheck.enabled</code>, in Databricks; in delta-rs it is the <code>enforce_retention_duration</code> argument tonight's script turns off. <code>VACUUM t DRY RUN</code> lists what would be deleted (up to 1,000 files) without deleting anything. Databricks also offers <code>VACUUM t LITE</code>, which finds candidates from the log, alongside the default <code>FULL</code> mode.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The sentence to remember from the docs<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks VACUUM page puts it plainly: "If you run VACUUM on a Delta table, you lose the ability to time travel back to a version older than the specified data retention period." The retention you pass is a promise about which versions may still be read. Retention 0 promises only the latest one.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why the one deleted file was the DELETE's output<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Replay the log the way session 2 taught. Version 2 removed A and B and added C. Version 3, the RESTORE, removed C and added A and B back. After version 3 the live set is A and B, and C is a tombstone: a file the latest version does not reference.</p>
+        <p>VACUUM with the default 7 days looks at C's tombstone, sees it is seconds old, and leaves it: dry run, 0 files. VACUUM with retention 0 and the check off treats every tombstone as expired, and C is the only one, so it deleted exactly 1 file. A and B survive because version 3 needs them. Version 2's entry is still in the log and still says "C is live", so reading version 2 asks for a file that is gone, and delta-rs raised <code>FileNotFoundError</code>. Nothing about the latest version changed: it still reads 77,033 rows.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Saving storage on a shared table.</strong> An engineer notices a shared trips table holds far more bytes than its live files account for, disables the retention check and runs <code>VACUUM ... RETAIN 0 HOURS</code>. The storage bill drops. The next morning a finance analyst's month-end notebook, which pins <code>VERSION AS OF</code> the version it reconciled against, fails with a missing file, and a teammate who wanted to RESTORE yesterday's state finds there is nothing left to restore to. This team is constructed; every step of the failure is what tonight's script does on your laptop.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Travel back, undo, then end a version on purpose</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Run this in the folder where sessions 1 and 2 left <code>trips_delta</code>; it expects the three versions they created. The outputs shown are what the laptop path printed when this build ran <code>b3.py</code> with deltalake 1.6.6 and DuckDB 1.5.6. The last part deletes a file for good, so if you want to repeat the session, re-run <code>b1.py</code> and <code>b2.py</code> first.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The trips_delta folder before and after the forced VACUUM. Before: the _delta_log with commits v0 to v3 and three data files, A, B and C. After: the log is untouched, A and B remain, and C is crossed out in red because VACUUM with retention 0 deleted it. Below: the latest version, files A and B, reads 77,033 rows; VERSION AS OF 2, which needs C, fails with FileNotFoundError. The dry run at default retention listed 0 files.">
+        <defs>
+          <filter id="b3dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="43" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b3dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b3dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b3dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b3dL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b3dC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b3dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b3dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b3dR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+        </style>
+
+        <text class="b3dH" x="30" y="30">BEFORE · after RESTORE, version 3</text>
+        <text class="b3dH" x="470" y="30">AFTER · vacuum, retention 0, check off</text>
+
+        <g filter="url(#b3dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="44" width="390" height="176" rx="10" transform="rotate(-0.4 225 132)" fill="#FFFFFF"/>
+          <rect x="470" y="44" width="390" height="176" rx="10" transform="rotate(0.4 665 132)" fill="#FFFFFF"/>
+          <rect x="50" y="62" width="350" height="36" rx="6" transform="rotate(0.6 225 80)" fill="#FFF5F3"/>
+          <rect x="490" y="62" width="350" height="36" rx="6" transform="rotate(-0.6 665 80)" fill="#FFF5F3"/>
+          <rect x="50" y="118" width="105" height="48" rx="6" transform="rotate(-2 102 142)" fill="url(#b3dHc)"/>
+          <rect x="172" y="118" width="105" height="48" rx="6" transform="rotate(2 224 142)" fill="url(#b3dHc)"/>
+          <rect x="294" y="118" width="105" height="48" rx="6" transform="rotate(-1.5 346 142)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="490" y="118" width="105" height="48" rx="6" transform="rotate(1.5 542 142)" fill="url(#b3dHc)"/>
+          <rect x="612" y="118" width="105" height="48" rx="6" transform="rotate(-2 664 142)" fill="url(#b3dHc)"/>
+          <rect x="734" y="118" width="105" height="48" rx="6" transform="rotate(2 786 142)" fill="#FFAB00" stroke="#4D3200" stroke-dasharray="5 4"/>
+          <path d="M738 120 L836 166" stroke="#991B1B" stroke-width="3"/>
+          <path d="M836 120 L738 166" stroke="#991B1B" stroke-width="3"/>
+          <path d="M426 200 L462 200" marker-end="url(#b3dAr)"/>
+          <path d="M452 120 L440 152"/>
+          <path d="M430 152 L450 152 L455 172 L425 172 Z"/>
+        </g>
+
+        <text class="b3dC" x="62" y="85">_delta_log/ · commits v0 to v3</text>
+        <text class="b3dC" x="502" y="85">_delta_log/ · untouched</text>
+        <rect x="60" y="128" width="85" height="28" rx="4" fill="#FFFFFF"/>
+        <rect x="182" y="128" width="85" height="28" rx="4" fill="#FFFFFF"/>
+        <rect x="500" y="128" width="85" height="28" rx="4" fill="#FFFFFF"/>
+        <rect x="622" y="128" width="85" height="28" rx="4" fill="#FFFFFF"/>
+        <text class="b3dL" x="68" y="146">file A</text>
+        <text class="b3dL" x="190" y="146">file B</text>
+        <text class="b3dL" x="306" y="140">file C</text>
+        <text class="b3dB" x="306" y="156">tombstone</text>
+        <text class="b3dL" x="508" y="146">file A</text>
+        <text class="b3dL" x="630" y="146">file B</text>
+        <text class="b3dS" x="50" y="196">3 data files on disk</text>
+        <text class="b3dS" x="490" y="196">2 data files on disk</text>
+        <text class="b3dR" x="734" y="196">file C deleted</text>
+
+        <text class="b3dS" x="30" y="252">vacuum dry run at default retention listed 0 files</text>
+        <text class="b3dL" x="470" y="252">latest (A, B): 77,033 rows</text>
+        <text class="b3dR" x="470" y="276">VERSION AS OF 2 (needs C): FileNotFoundError</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the log still describes version 2 perfectly; it is the file it points at that is gone</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Read every version.</strong> Ask the table for its latest version, then open it at each version from 0 up and count the rows. Nothing is copied: each read is a replay that stops early.</p>
+        <div class="prompt-box good"><span class="label">★ b3.py, part 1</span># Analyst session 3: time travel, restore, and what VACUUM takes away (run b1.py and b2.py first)
+import duckdb
+from deltalake import DeltaTable
+
+for v in range(DeltaTable("trips_delta").version() + 1):
+    print(f"VERSION AS OF {v}:", len(DeltaTable("trips_delta", version=v).to_pyarrow_table()), "rows")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>VERSION AS OF 0: 21617 rows
+VERSION AS OF 1: 77033 rows
+VERSION AS OF 2: 76103 rows</div>
+      </div>
+      <div class="step">
+        <p><strong>Read the history.</strong> One row per commit, newest first, with the parameters each operation recorded.</p>
+        <div class="prompt-box good"><span class="label">★ b3.py, part 2</span>for h in DeltaTable("trips_delta").history():
+    print("history:", h["version"], h["operation"], h.get("operationParameters", {}))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>history: 2 DELETE {'predicate': 'fare_amount &lt; 0'}
+history: 1 WRITE {'mode': 'Append'}
+history: 0 WRITE {'mode': 'ErrorIfExists'}</div>
+      </div>
+      <div class="step">
+        <p><strong>Undo the DELETE.</strong> Restore to version 1, then open the table fresh. Predict the version number before you look.</p>
+        <div class="prompt-box good"><span class="label">★ b3.py, part 3</span>dt = DeltaTable("trips_delta")
+dt.restore(1)                                   # undo the DELETE with a NEW commit
+dt = DeltaTable("trips_delta")
+print("after RESTORE: version", dt.version(), "rows", len(dt.to_pyarrow_table()))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>after RESTORE: version 3 rows 77033</div>
+      </div>
+      <div class="step">
+        <p><strong>VACUUM twice, then try to go back.</strong> First with the default retention, which finds nothing old enough. Then with retention forced to zero, which deletes the one file no live version needs. Then ask for version 2, which needed that file, and finally read the latest version with a different engine.</p>
+        <div class="prompt-box good"><span class="label">★ b3.py, part 4</span># VACUUM: default retention protects recent files, so a dry run finds nothing to delete
+print("vacuum dry run, default retention:", len(dt.vacuum()), "files")
+# force retention to zero (never do this on a shared table): files no live version needs are deleted
+gone = dt.vacuum(retention_hours=0, enforce_retention_duration=False, dry_run=False)
+print("vacuum with retention 0 deleted:", len(gone), "files")
+try:
+    print(len(DeltaTable("trips_delta", version=2).to_pyarrow_table()))
+except Exception as e:
+    print("time travel to version 2 now fails:", type(e).__name__)
+print("latest still reads:", duckdb.sql("INSTALL delta; LOAD delta; SELECT count(*) FROM delta_scan('trips_delta')").fetchone()[0], "rows")</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, deltalake 1.6.6</span>vacuum dry run, default retention: 0 files
+vacuum with retention 0 deleted: 1 files
+time travel to version 2 now fails: FileNotFoundError
+latest still reads: 77033 rows</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional).</strong> Use the managed table you created in session 1. That table was made in one <code>CREATE TABLE ... AS SELECT</code>, so its history is not the laptop table's: make a change to undo first, read <code>DESCRIBE HISTORY</code>, and restore to the version just before your DELETE (version 0 below if the CTAS is the only earlier commit). This build did not run these statements, so no output is shown; expect the history to list your DELETE on top, and the restore to appear as a new row above it.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, SQL cell (not run in this build)</span>DELETE FROM your_catalog.your_schema.trips_jan15 WHERE fare_amount &lt; 0;
+
+DESCRIBE HISTORY your_catalog.your_schema.trips_jan15;
+
+SELECT count(*) FROM your_catalog.your_schema.trips_jan15 VERSION AS OF 0;
+
+RESTORE TABLE your_catalog.your_schema.trips_jan15 TO VERSION AS OF 0;
+
+VACUUM your_catalog.your_schema.trips_jan15 DRY RUN;</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ Reclaiming storage on a table other people read</span># "the folder is twice the size of the live files, let's clean it up"
+dt = DeltaTable("shared_trips")
+dt.vacuum(retention_hours=0, enforce_retention_duration=False, dry_run=False)
+# every version older than the latest can no longer be read or restored,
+# including the one a colleague's month-end notebook pins with VERSION AS OF</div>
+
+    <div class="callout tip">
+      <p><strong>Dry run first, and set retention by the oldest version anyone may need.</strong> Run <code>VACUUM ... DRY RUN</code> (or <code>dry_run=True</code> on the laptop) and read the list before deleting anything. Keep <code>delta.deletedFileRetentionDuration</code> at least as long as the oldest version a report, an audit or a restore may need, and leave the retention safety check on. If VACUUM runs on a schedule, it belongs with your other scheduled jobs; how to schedule and monitor them is in <a href="https://phoebefu6.github.io/learn-data-orchestration-with-phoebe/">the data orchestration course</a>.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 4</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Rebuild and restore to version 0.</strong> Re-run <code>b1.py</code> and <code>b2.py</code>, then <code>dt.restore(0)</code>. Before you read it, write down the version number and row count you expect, then check against <code>VERSION AS OF 0</code> above.</li>
+      <li><strong>Open the RESTORE commit.</strong> Find <code>00000000000000000003.json</code> in <code>_delta_log</code> and list its actions. Which files does it <code>remove</code> and <code>add</code>, what is <code>dataChange</code>, and does it carry <code>protocol</code> and <code>metaData</code> the way the bench's v35 RESTORE does?</li>
+      <li><strong>Make VACUUM tell you before it acts.</strong> On a fresh rebuild after the restore, call <code>dt.vacuum(retention_hours=0, enforce_retention_duration=False, dry_run=True)</code> and print the list. Use session 2's replay to show that the path it names is the file version 2 added and version 3 removed.</li>
+      <li><strong>Write a retention rule for one real table.</strong> Name the oldest version anyone at work reads or might restore, set a file retention that covers it, and say who may run VACUUM with the check off. <a href="a2-a-table-that-remembers.html">Leader session 2</a> builds the same policy for managers if you want a template.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 3 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · You run <code>dt.restore(1)</code> on a table at version 2. What does it write to the log?</p>
+      <button class="qopt" type="button">A · Nothing new: it deletes the version 2 entry so the table is at version 1 again</button>
+      <button class="qopt" type="button">B · A new commit, version 3, that removes and adds files to match version 1, marked <code>dataChange</code> true</button>
+      <button class="qopt" type="button">C · A new commit marked <code>dataChange</code> false, because no new rows were written</button>
+      <button class="qopt" type="button">D · A full copy of version 1's data files under new names</button>
+      <p class="qwhy">Writers never overwrite or delete log entries, so undo is a new commit. Tonight's run printed version 3 with 77,033 rows, and the docs call RESTORE "a data-changing operation", which is why streaming readers may process the restored rows again.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · After the forced VACUUM, the latest version reads 77,033 rows but version 2 fails with FileNotFoundError. Why?</p>
+      <button class="qopt" type="button">A · VACUUM deleted version 2's log entry</button>
+      <button class="qopt" type="button">B · Version 2 is newer than the checkpoint, so it cannot be replayed</button>
+      <button class="qopt" type="button">C · VACUUM deleted every file older than zero hours, including A and B</button>
+      <button class="qopt" type="button">D · Version 2 needs file C, the DELETE's output; RESTORE made C a tombstone and retention 0 let VACUUM delete it</button>
+      <p class="qwhy">The log still says C is live at version 2, but the file is gone. A and B survive because version 3 needs them, which is why exactly 1 file was deleted and the latest read is unaffected.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · What is the default retention for deleted data files before VACUUM may remove them?</p>
+      <button class="qopt" type="button">A · 7 days</button>
+      <button class="qopt" type="button">B · 30 days</button>
+      <button class="qopt" type="button">C · 0 hours</button>
+      <button class="qopt" type="button">D · Until the next checkpoint</button>
+      <p class="qwhy"><code>delta.deletedFileRetentionDuration</code> defaults to 7 days, which PROTOCOL.md also gives as the VACUUM default. 30 days is the default for log entries, <code>delta.logRetentionDuration</code>, a different setting.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">VERSION AS OF, TIMESTAMP AS OF, @v syntax; DESCRIBE HISTORY; retention defaults 7 and 30 days; RESTORE as a data-changing operation</span><span class="note">Databricks documentation, "Work with table history", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">VACUUM retention, safety check, DRY RUN up to 1,000 files, LITE and FULL, the end of time travel</span><span class="note">Databricks documentation, "VACUUM", read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Log entries never overwritten, tombstones kept for VACUUM, checkpoints and time travel, In-Commit Timestamps named</span><span class="note">Delta Lake, "Delta Transaction Log Protocol" (PROTOCOL.md), read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Every printed output in the build-along, and the bench's v30, v33 and v35 numbers</span><span class="note">Run in this build with deltalake 1.6.6 and DuckDB 1.5.6 on the NYC TLC yellow taxi file for January 2024</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition SQL and the two team stories</span><span class="note">The SQL was not run in this build; the Friday DELETE and the shared-table VACUUM stories are constructed</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Read a version</b><span>Laptop: DeltaTable(path, version=v). Databricks: VERSION AS OF v, TIMESTAMP AS OF, t@v.</span></div>
+      <div class="cheat-item"><b>History, newest first</b><span>history() or DESCRIBE HISTORY: one row per commit, with its parameters.</span></div>
+      <div class="cheat-item"><b>RESTORE = new commit</b><span>Removes and adds files to match the old version; dataChange true; old versions stay.</span></div>
+      <div class="cheat-item"><b>7-day files, 30-day log</b><span>deletedFileRetentionDuration and logRetentionDuration defaults; the shorter wins.</span></div>
+      <div class="cheat-item"><b>DRY RUN first</b><span>Read the list before VACUUM deletes anything; keep the safety check on.</span></div>
+      <div class="cheat-item"><b>VACUUM ends time travel</b><span>Past the retention you set, a version whose files are gone can no longer be read or restored.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Every commit so far did one kind of thing: write, append, delete or restore. Session 4 is MERGE, where a single commit inserts, updates and deletes at once, driven by a feed of changes, and where the change data feed lets you read back exactly what each commit did to each row.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 3 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b2-the-transaction-log.html">← Prev: Reading the transaction log</a> &nbsp;·&nbsp; <a href="b4-merge-and-change-data.html">Next: MERGE and change data →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

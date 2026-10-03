@@ -1,0 +1,7 @@
+Successfully registered model 'taxi_tip_model'.
+Created version '1' of model 'taxi_tip_model'.
+card trips on 15 Jan: 61260
+linear    MAE $1.387
+forest    MAE $1.331
+registered taxi_tip_model version 1 from forest as @champion
+champion on a real JFK trip: fare $85.60, 21.66 miles, predicted tip $14.93, actual tip $21.77

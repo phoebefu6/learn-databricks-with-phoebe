@@ -1,0 +1,6 @@
+all_purpose  3.75 DBU/h x $0.55 = $2.0625 + VMs $1.465 = $3.5275/h
+jobs         3.75 DBU/h x $0.30 = $1.1250 + VMs $1.465 = $2.5900/h
+same 2-hour nightly job: all-purpose $7.06, jobs $5.18; over 30 nights $211.65 vs $155.40
+all-purpose cluster left on 14 idle hours overnight: $49.39
+serverless SQL 2X-Small, 4 DBU/h: $2.80/h, machines run in the Databricks-managed serverless plane
+DBU rate ratio all-purpose / jobs: 1.83x

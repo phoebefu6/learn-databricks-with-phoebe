@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Analyst session 6 of 8. Unity Catalog grants from the Databricks privileges reference: which privileges attach to a catalog, a schema, a table, a model and a volume, the three checks that decide every read, inheritance into tables nobody has built yet, and SHOW GRANTS as the only grant list worth trusting. Run a local model of the documented rule, then write the real SQL.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Unity Catalog grants - learn databricks with phoebe">
+<meta property="og:description" content="Analyst session 6 of 8. Three keys to read one table, grants that flow down to future tables, and SHOW GRANTS as the source of truth. A local model of the documented rule you can run with plain Python.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/courses/b6-unity-catalog-grants.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Unity Catalog grants - learn databricks with phoebe">
+<meta name="twitter:description" content="Analyst session 6 of 8. GRANT, inheritance and SHOW GRANTS, with a local model of the read rule you can run anywhere.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-databricks-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Analyst session 6 · Unity Catalog grants - learn databricks with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=3">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-databricks-with-phoebe</a> / Analyst session 6 of 8</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Databricks with Phoebe · Analyst track · Session 6 of 8</div>
+    <h1>Unity Catalog <span class="accent">grants</span></h1>
+    <p class="sub">Five sessions of Delta tables, and every one of them assumed you were allowed to read the table. On Databricks that permission is a GRANT statement attached to one node of the Unity Catalog tree, and three of them have to line up before a single row comes back. Tonight you learn to read and write those statements for a catalog, a schema and a table, run a small Python model of the documented read rule until its answers feel obvious, and leave with SHOW GRANTS as the habit that replaces remembering who has what.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Hands-on</span>
+      <span class="chip audience">Analysts, engineers, platform owners</span>
+      <span class="chip audience">Laptop path: a local model, no account</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Privileges, three checks, SHOW GRANTS</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: model the rule, write the SQL</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Grants are different from the rest of the analyst track in one honest way: there is no open-source Unity Catalog on your laptop to run them against in this build. So the laptop path tonight is <code>b6.py</code>, about twenty lines of plain Python that encode the read rule exactly as the Databricks privileges reference states it, and every output on this page is what that model printed. It is a model of the documented rule, not Unity Catalog itself, and the page says so on every output box. The Free Edition path gives you the real GRANT and SHOW GRANTS statements to run on your own catalog.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Laptop path = a local model of the rule, outputs pasted</span>
+      <span class="pill">Free Edition path = the real SQL, labelled</span>
+      <span class="pill">★ Build-along = you make the artifact</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> GRANT statements you can read and write for a catalog, a schema and a table; a mental model of how every read is decided, in three checks; and SHOW GRANTS as the way you check, instead of a spreadsheet or your memory.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers securables and privileges</span>
+      <h2>What you grant, on what</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Unity Catalog names every governed object with three parts, <code>catalog.schema.table</code>, and calls each of them a securable. A privilege is always granted on exactly one securable to one principal, ideally a group. Which privileges make sense depends on the level: the doors sit on the catalog and the schema, the data rights sit on the table, and models and volumes have privileges of their own.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 384" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The securable tree for tonight. Catalog main takes USE CATALOG, the first door, which grants no data by itself. Under it schema main.taxi takes USE SCHEMA, the second door, plus CREATE TABLE and CREATE MODEL. Under the schema sit three objects: the table main.taxi.trips, highlighted, which takes SELECT to read rows and MODIFY to change them; a model main.taxi.taxi_tip_model, which takes EXECUTE to load it; and a volume main.taxi.raw_files, which takes READ VOLUME and WRITE VOLUME. A privilege granted on main or main.taxi reaches every object below it, including objects not created yet.">
+        <defs>
+          <filter id="b6aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="61" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6aH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b6aL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b6aC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b6aS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b6aB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b6aN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b6aH" x="30" y="26">ONE TREE · A PRIVILEGE ATTACHES TO ONE NODE AND FLOWS DOWN</text>
+
+        <g filter="url(#b6aSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="44" width="220" height="52" rx="8" transform="rotate(-0.8 150 70)" fill="#FFF5F3"/>
+          <rect x="80" y="136" width="220" height="52" rx="8" transform="rotate(0.8 190 162)" fill="#FFF5F3"/>
+          <path d="M120 100 L120 130" marker-end="url(#b6aAr)"/>
+          <rect x="120" y="236" width="220" height="56" rx="8" transform="rotate(-1 230 264)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="380" y="236" width="210" height="56" rx="8" transform="rotate(1 485 264)" fill="#FFFFFF"/>
+          <rect x="630" y="236" width="210" height="56" rx="8" transform="rotate(-1 735 264)" fill="#FFFFFF"/>
+          <path d="M200 192 L220 230" marker-end="url(#b6aAr)"/>
+          <path d="M270 192 C320 214 430 212 470 230" marker-end="url(#b6aAr)"/>
+          <path d="M290 190 C420 206 680 206 720 230" marker-end="url(#b6aAr)"/>
+          <circle cx="806" cy="66" r="10"/>
+          <path d="M816 66 L850 66 M840 66 L840 76 M848 66 L848 74"/>
+        </g>
+
+        <text class="b6aH" x="54" y="66">CATALOG</text>
+        <text class="b6aC" x="54" y="84">main</text>
+        <text class="b6aC" x="300" y="64">USE CATALOG</text>
+        <text class="b6aS" x="300" y="82">the first door: lets you into main, grants no data</text>
+
+        <text class="b6aH" x="94" y="158">SCHEMA</text>
+        <text class="b6aC" x="94" y="176">main.taxi</text>
+        <text class="b6aC" x="340" y="158">USE SCHEMA · CREATE TABLE · CREATE MODEL</text>
+        <text class="b6aS" x="340" y="176">the second door, plus the right to add objects inside</text>
+
+        <text class="b6aB" x="134" y="258">TABLE</text>
+        <text class="b6aL" x="134" y="278">main.taxi.trips</text>
+        <text class="b6aH" x="394" y="258">MODEL</text>
+        <text class="b6aC" x="394" y="278">main.taxi.taxi_tip_model</text>
+        <text class="b6aH" x="644" y="258">VOLUME</text>
+        <text class="b6aC" x="644" y="278">main.taxi.raw_files</text>
+
+        <text class="b6aC" x="124" y="318">SELECT · MODIFY</text>
+        <text class="b6aS" x="124" y="336">read rows · change rows</text>
+        <text class="b6aC" x="384" y="318">EXECUTE</text>
+        <text class="b6aS" x="384" y="336">load and call the model</text>
+        <text class="b6aC" x="634" y="318">READ VOLUME · WRITE VOLUME</text>
+        <text class="b6aS" x="634" y="336">read or write the files</text>
+
+        <text class="b6aN" x="30" y="368">Granted on main or main.taxi, a privilege reaches every object below it, including ones not created yet.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber table is tonight's target; the model and volume names are constructed, the privilege names are the documented ones</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The privileges you will actually type<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The Databricks reference "Unity Catalog privileges and securable objects" lists many privilege types; a working analyst meets a short list. <strong>USE CATALOG</strong> and <strong>USE SCHEMA</strong> are doors: they let you into a catalog or schema and give no data on their own. <strong>SELECT</strong> reads a table or view, <strong>MODIFY</strong> changes its rows. <strong>CREATE TABLE</strong> and <strong>CREATE MODEL</strong> on a schema let you add objects inside it. <strong>EXECUTE</strong> lets you load a registered model, and <strong>READ VOLUME</strong> and <strong>WRITE VOLUME</strong> govern the files in a volume.</p>
+        <p>Two more deserve a warning label. <strong>MANAGE</strong> lets a principal manage privileges, transfer ownership, rename and drop an object without owning it (Part 3). <strong>ALL PRIVILEGES</strong> sounds like everything and is not: the reference excludes EXTERNAL USE SCHEMA, EXTERNAL USE LOCATION, MANAGE and READ METADATA from it. Someone holding ALL PRIVILEGES can read and change far more data than most roles need, and still cannot manage grants.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>GRANT, with the securable keyword<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Every grant names the privilege, the kind of securable, its full name and the principal. The securable keyword (<code>CATALOG</code>, <code>SCHEMA</code>, <code>TABLE</code>) is not decoration: it tells the reader of the statement which level of the tree the grant attaches to, and therefore how far down it reaches. Principals go in backticks because group names can contain hyphens or spaces.</p>
+        <p><code>GRANT SELECT ON TABLE main.taxi.trips TO `analysts`</code> attaches SELECT to one table. <code>GRANT SELECT ON SCHEMA main.taxi TO `finance`</code> attaches it to the schema, so it reaches every table in <code>main.taxi</code>. Read the keyword first, then the name; it is the fastest way to spot a grant that is wider than it looks.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Roles, row filters and masks live next door<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>This session is Databricks' implementation: the securables, the privilege names and the SQL. How to design roles in the first place, when attribute-based access beats role-based, and how row filters and column masks work as ideas are taught in <a href="https://phoebefu6.github.io/learn-data-access-control-with-phoebe/">the data access control course</a>. Read it before you design anything finer than the table level.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>"Give her everything, she is senior" (constructed).</strong> A team lead asks for a new analytics engineer to be able to "manage the taxi data". The platform engineer grants ALL PRIVILEGES on the catalog, reasoning that it must cover managing. A week later the engineer tries to grant SELECT to a new hire and cannot: ALL PRIVILEGES excludes MANAGE. Meanwhile she can change rows in every table in the catalog, which nobody asked for. The fix is two narrower grants: the read keys on the schemas she works in, and MANAGE on the one schema she was meant to look after.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers how a read is decided</span>
+      <h2>Three checks, in order</h2>
+      <span class="tag concept">6 min live</span>
+    </div>
+    <p class="lede">When a principal reads a table, the documented rule asks three questions: may they use the catalog, may they use the schema, and do they hold SELECT on the table? Each question is answered by looking at the object itself and at every parent above it, because privileges on a catalog or schema flow down. The table below is exactly what <code>b6.py</code> evaluated for its five requests.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 410" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A grid of the five read requests b6.py evaluates, with the three checks as columns in order: USE CATALOG on main, USE SCHEMA on main.taxi, SELECT on the table or a parent. Row 1, analysts on trips with no grants: all three missing, denied, missing USE CATALOG, USE SCHEMA, SELECT. Row 2, analysts on trips after SELECT on the table: first two missing, SELECT held on trips, denied, missing USE CATALOG, USE SCHEMA. Row 3, analysts after all three keys: all held, can read. Row 4, finance on zones_created_next_year: all held, SELECT inherited from the schema main.taxi, highlighted, can read. Row 5, analysts on zones_created_next_year: doors held, SELECT missing because it is only on trips, denied, missing SELECT.">
+        <defs>
+          <filter id="b6bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6bH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b6bL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b6bR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b6bX { font: 600 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .b6bC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b6bS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b6bB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b6bN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b6bH" x="30" y="26">ONE READ REQUEST, THREE CHECKS, ONE ANSWER</text>
+
+        <g filter="url(#b6bSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M226 42 L586 42" marker-end="url(#b6bAr)"/>
+          <circle cx="828" cy="26" r="9"/>
+          <path d="M835 33 L846 44"/>
+
+          <rect x="30" y="92" width="180" height="44" rx="6" transform="rotate(-0.6 120 114)" fill="#FFFFFF"/>
+          <rect x="222" y="92" width="110" height="44" rx="6" transform="rotate(0.6 277 114)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="342" y="92" width="110" height="44" rx="6" transform="rotate(-0.6 397 114)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="462" y="92" width="130" height="44" rx="6" transform="rotate(0.6 527 114)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="602" y="92" width="258" height="44" rx="6" transform="rotate(-0.4 731 114)" fill="#FFFFFF" stroke="#991B1B"/>
+
+          <rect x="30" y="150" width="180" height="44" rx="6" transform="rotate(0.6 120 172)" fill="#FFFFFF"/>
+          <rect x="222" y="150" width="110" height="44" rx="6" transform="rotate(-0.6 277 172)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="342" y="150" width="110" height="44" rx="6" transform="rotate(0.6 397 172)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="462" y="150" width="130" height="44" rx="6" transform="rotate(-0.6 527 172)" fill="#FFFFFF"/>
+          <rect x="602" y="150" width="258" height="44" rx="6" transform="rotate(0.4 731 172)" fill="#FFFFFF" stroke="#991B1B"/>
+
+          <rect x="30" y="208" width="180" height="44" rx="6" transform="rotate(-0.6 120 230)" fill="#FFFFFF"/>
+          <rect x="222" y="208" width="110" height="44" rx="6" transform="rotate(0.6 277 230)" fill="#FFFFFF"/>
+          <rect x="342" y="208" width="110" height="44" rx="6" transform="rotate(-0.6 397 230)" fill="#FFFFFF"/>
+          <rect x="462" y="208" width="130" height="44" rx="6" transform="rotate(0.6 527 230)" fill="#FFFFFF"/>
+          <rect x="602" y="208" width="258" height="44" rx="6" transform="rotate(-0.4 731 230)" fill="#FFF5F3" stroke="#E00F00"/>
+
+          <rect x="30" y="266" width="180" height="44" rx="6" transform="rotate(0.6 120 288)" fill="#FFFFFF"/>
+          <rect x="222" y="266" width="110" height="44" rx="6" transform="rotate(-0.6 277 288)" fill="#FFFFFF"/>
+          <rect x="342" y="266" width="110" height="44" rx="6" transform="rotate(0.6 397 288)" fill="#FFFFFF"/>
+          <rect x="462" y="266" width="130" height="44" rx="6" transform="rotate(-0.6 527 288)" fill="#FFAB00" stroke="#4D3200"/>
+          <rect x="602" y="266" width="258" height="44" rx="6" transform="rotate(0.4 731 288)" fill="#FFF5F3" stroke="#E00F00"/>
+
+          <rect x="30" y="324" width="180" height="44" rx="6" transform="rotate(-0.6 120 346)" fill="#FFFFFF"/>
+          <rect x="222" y="324" width="110" height="44" rx="6" transform="rotate(0.6 277 346)" fill="#FFFFFF"/>
+          <rect x="342" y="324" width="110" height="44" rx="6" transform="rotate(-0.6 397 346)" fill="#FFFFFF"/>
+          <rect x="462" y="324" width="130" height="44" rx="6" transform="rotate(0.6 527 346)" fill="#FFFFFF" stroke="#991B1B" stroke-dasharray="5 4"/>
+          <rect x="602" y="324" width="258" height="44" rx="6" transform="rotate(-0.4 731 346)" fill="#FFFFFF" stroke="#991B1B"/>
+        </g>
+
+        <text class="b6bH" x="226" y="62">1 · USE CATALOG</text>
+        <text class="b6bH" x="346" y="62">2 · USE SCHEMA</text>
+        <text class="b6bH" x="466" y="62">3 · SELECT</text>
+        <text class="b6bH" x="606" y="62">RESULT AS PRINTED</text>
+        <text class="b6bS" x="226" y="78">on main</text>
+        <text class="b6bS" x="346" y="78">on main.taxi</text>
+        <text class="b6bS" x="466" y="78">on table or a parent</text>
+        <text class="b6bS" x="606" y="78">copied from b6.out.txt</text>
+
+        <text class="b6bL" x="42" y="111">1 · analysts</text>
+        <text class="b6bS" x="42" y="127">trips, no grants yet</text>
+        <text class="b6bR" x="234" y="119">missing</text>
+        <text class="b6bR" x="354" y="119">missing</text>
+        <text class="b6bR" x="474" y="119">missing</text>
+        <text class="b6bX" x="614" y="111">denied, missing</text>
+        <text class="b6bX" x="614" y="127">USE CATALOG, USE SCHEMA, SELECT</text>
+
+        <text class="b6bL" x="42" y="169">2 · analysts</text>
+        <text class="b6bS" x="42" y="185">trips, after SELECT</text>
+        <text class="b6bR" x="234" y="177">missing</text>
+        <text class="b6bR" x="354" y="177">missing</text>
+        <text class="b6bL" x="474" y="177">✓ on trips</text>
+        <text class="b6bX" x="614" y="169">denied, missing</text>
+        <text class="b6bX" x="614" y="185">USE CATALOG, USE SCHEMA</text>
+
+        <text class="b6bL" x="42" y="227">3 · analysts</text>
+        <text class="b6bS" x="42" y="243">trips, all three keys</text>
+        <text class="b6bL" x="234" y="235">✓ held</text>
+        <text class="b6bL" x="354" y="235">✓ held</text>
+        <text class="b6bL" x="474" y="235">✓ on trips</text>
+        <text class="b6bC" x="614" y="235">can read</text>
+
+        <text class="b6bL" x="42" y="285">4 · finance</text>
+        <text class="b6bS" x="42" y="301">zones_created_next_year</text>
+        <text class="b6bL" x="234" y="293">✓ held</text>
+        <text class="b6bL" x="354" y="293">✓ held</text>
+        <text class="b6bB" x="474" y="293">✓ via main.taxi</text>
+        <text class="b6bC" x="614" y="293">can read</text>
+
+        <text class="b6bL" x="42" y="343">5 · analysts</text>
+        <text class="b6bS" x="42" y="359">zones_created_next_year</text>
+        <text class="b6bL" x="234" y="351">✓ held</text>
+        <text class="b6bL" x="354" y="351">✓ held</text>
+        <text class="b6bR" x="474" y="343">missing</text>
+        <text class="b6bS" x="474" y="359">only on trips</text>
+        <text class="b6bX" x="614" y="343">denied, missing</text>
+        <text class="b6bX" x="614" y="359">SELECT</text>
+
+        <text class="b6bN" x="30" y="396">SELECT passes on the table or any parent, so row 4 reads a table that did not exist when it was granted.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber cell is inheritance at work: a schema grant answering for a table nobody had built yet</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The documented rule, and the word "future"<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The privileges reference states the read rule plainly: to read a table you need SELECT on the table, USE CATALOG on its parent catalog and USE SCHEMA on its parent schema. Rows 1 and 2 are why the rule needs memorising. With nothing granted, all three are missing. With SELECT on the table alone, the analysts group is still turned away, now for the two doors only. The classic "I was granted SELECT and still cannot see it" ticket is row 2.</p>
+        <p>The same reference says privileges granted on a catalog or schema apply to "all current and future objects" inside it. That one phrase is what makes schema-level grants cheap to run and risky to give: the grant was decided against the tables you could see that day, and it will answer for tables nobody has thought of yet.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Outputs 4 and 5: one new table, two groups<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The finance group gets SELECT on the schema <code>main.taxi</code> plus the two doors. Then the model asks about <code>main.taxi.zones_created_next_year</code>, a table no grant ever named. Finance: "can read", because the SELECT check walks up from the table and finds it on <code>main.taxi</code>. The analysts group holds both doors and SELECT on <code>trips</code> only, so for the same new table it prints "denied, missing SELECT". Same schema, same day, opposite answers, decided entirely by where each SELECT was attached.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>What the model leaves out<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>b6.py</code> encodes one rule and nothing else, and it is worth knowing where real Unity Catalog will answer differently. It has no <strong>ownership</strong>, no <strong>MANAGE</strong>, no <strong>row filters or column masks</strong> (which shape what a reader sees after the three checks pass), no <strong>workspace bindings</strong> and no <strong>external locations</strong>. It also treats a principal as a single name, so it cannot show a user inheriting a grant through group membership. Use it to learn the three checks; use SHOW GRANTS to learn your workspace.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The table that arrived already shared (constructed).</strong> A data engineer lands a new driver-ratings table in <code>main.taxi</code> on a Friday. On Monday a finance analyst mentions it in a meeting, and the engineer asks who gave finance access. Nobody did, on that table. Finance held SELECT on the schema, granted months earlier for the trip tables, and row 4 above is what happened. Nothing was misconfigured; the grant did exactly what the reference says. The team now asks one question before any table lands: who already reads this schema, and should they read this too?</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers checking grants</span>
+      <h2>Trust SHOW GRANTS, not memory</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">Grants change one statement at a time, by different people, for different reasons. Any list of them kept anywhere else, a spreadsheet, a wiki page, a ticket, starts going stale the moment someone runs a GRANT by hand. The catalog itself is the only record that is always current, and SHOW GRANTS is how you read it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 366" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before and after. Before, a wrong-way panel: a hand-kept spreadsheet of grants listing analysts SELECT on main.taxi.trips and finance SELECT on main.taxi; it was last edited months ago, has no USE CATALOG or USE SCHEMA rows, says nothing about tables created since, and one GRANT run by hand makes it wrong. After: SHOW GRANTS ON TABLE main.taxi.trips, highlighted, reads the grants as Unity Catalog records them now, including what someone typed by hand today; REVOKE what nobody asked for, then run it again. Below: the owner can grant on its object but one person is a single point of failure; MANAGE lets a principal grant, transfer ownership, rename and drop without owning it, and is not included in ALL PRIVILEGES.">
+        <defs>
+          <filter id="b6cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6cHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6cH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b6cR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b6cL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b6cC { font: 600 11px ui-monospace, Menlo, monospace; fill: #9E0B00; }
+          .b6cS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b6cB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b6cN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <g filter="url(#b6cSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="40" width="400" height="222" rx="12" transform="rotate(-0.3 230 151)" fill="#FFFFFF" stroke="#FCA5A5"/>
+          <rect x="450" y="40" width="400" height="222" rx="12" transform="rotate(0.3 650 151)" fill="#FFF5F3" stroke="#E00F00"/>
+          <circle cx="396" cy="62" r="11"/>
+          <path d="M396 62 L396 55 M396 62 L402 65"/>
+          <rect x="50" y="82" width="360" height="80" rx="4" transform="rotate(-0.6 230 122)" fill="#FCFAF7"/>
+          <path d="M58 108 L402 108 M58 134 L402 134"/>
+          <rect x="470" y="82" width="360" height="56" rx="6" transform="rotate(0.6 650 110)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M650 142 L650 168" marker-end="url(#b6cAr)"/>
+          <rect x="470" y="172" width="360" height="46" rx="6" transform="rotate(-0.6 650 195)" fill="#FFFFFF"/>
+          <rect x="30" y="280" width="400" height="46" rx="6" transform="rotate(-0.4 230 303)" fill="#FFFFFF"/>
+          <rect x="450" y="280" width="400" height="46" rx="6" transform="rotate(0.4 650 303)" fill="#FFF5F3"/>
+        </g>
+
+        <text class="b6cR" x="48" y="66">BEFORE · THE SPREADSHEET SAYS</text>
+        <text class="b6cH" x="64" y="100">group</text>
+        <text class="b6cH" x="164" y="100">privilege</text>
+        <text class="b6cH" x="264" y="100">on</text>
+        <text class="b6cL" x="64" y="126">analysts</text>
+        <text class="b6cC" x="164" y="126">SELECT</text>
+        <text class="b6cC" x="264" y="126">main.taxi.trips</text>
+        <text class="b6cL" x="64" y="152">finance</text>
+        <text class="b6cC" x="164" y="152">SELECT</text>
+        <text class="b6cC" x="264" y="152">main.taxi</text>
+        <text class="b6cS" x="50" y="186">kept by hand, last edited months ago</text>
+        <text class="b6cS" x="50" y="206">no USE CATALOG or USE SCHEMA rows at all</text>
+        <text class="b6cS" x="50" y="226">silent about tables created in main.taxi since</text>
+        <text class="b6cR" x="50" y="250">one GRANT run by hand and it is wrong</text>
+
+        <text class="b6cH" x="468" y="66">AFTER · ASK THE CATALOG ITSELF</text>
+        <text class="b6cB" x="484" y="104">SHOW GRANTS ON TABLE main.taxi.trips;</text>
+        <text class="b6cL" x="484" y="124">run it whenever you need the truth</text>
+        <text class="b6cS" x="658" y="160">reads</text>
+        <text class="b6cL" x="484" y="192">grants as Unity Catalog records them now</text>
+        <text class="b6cS" x="484" y="208">including what someone typed by hand today</text>
+        <text class="b6cS" x="470" y="244">REVOKE what nobody asked for, then run it again</text>
+
+        <text class="b6cL" x="44" y="299">owner: the principal that owns the object</text>
+        <text class="b6cS" x="44" y="316">can grant on it; one person is a single point of failure</text>
+        <text class="b6cL" x="464" y="299">MANAGE: grant, transfer ownership, rename, drop</text>
+        <text class="b6cS" x="464" y="316">without owning it; not included in ALL PRIVILEGES</text>
+
+        <text class="b6cN" x="30" y="352">SHOW GRANTS and REVOKE are standard Unity Catalog SQL. A spreadsheet is a copy, and copies age.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the amber statement is the habit: ask the catalog, and the grant list can never be out of date</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>SHOW GRANTS and REVOKE<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><code>SHOW GRANTS ON TABLE main.taxi.trips</code> lists the grants recorded on that securable; <code>SHOW GRANTS ON SCHEMA main.taxi</code> does the same one level up. Both are standard Unity Catalog SQL commands, and because inheritance flows down, a complete answer to "who can read trips?" means looking at the table, its schema and its catalog. <code>REVOKE SELECT ON TABLE main.taxi.trips FROM `analysts`</code> removes a grant, with the same shape as GRANT and <code>FROM</code> in place of <code>TO</code>.</p>
+        <p>Run SHOW GRANTS before you change anything and again after. The first run tells you what is really there, which is often not what the ticket assumed; the second proves the change did what you meant and nothing more.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Owners, and MANAGE without ownership<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Every securable has an owner who can grant on it. If that owner is one person, every access request waits on one inbox. The privileges reference describes MANAGE as the privilege that lets a principal manage privileges, transfer ownership, rename and drop an object without owning it. Grant MANAGE to a stewards group and the owner stops being a bottleneck. Remember the trap from Part 1: ALL PRIVILEGES does not include MANAGE.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Models are securables too<span class="mini">1 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A model registered in Unity Catalog has a three-part name like a table, <code>&lt;catalog&gt;.&lt;schema&gt;.&lt;model&gt;</code>, and the same tree of grants. The models documentation lists what each action needs: CREATE MODEL plus USE SCHEMA on the schema to create a model, CREATE MODEL VERSION to add versions, and EXECUTE to load it. Session 7 registers a real model locally and then shows where these grants come in on Databricks.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>"I have SELECT and it still says permission denied" (constructed).</strong> An analyst is told her access to <code>main.taxi.trips</code> is done, and her first query fails. The platform engineer resists the urge to re-grant SELECT and walks the three checks instead, with SHOW GRANTS at each level. On the table: SELECT for her group, present. On <code>main.taxi</code>: no USE SCHEMA for her group. On <code>main</code>: no USE CATALOG either. Two GRANT statements later she can read, which is output 2 becoming output 3. The ticket took five minutes because nobody had to guess.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Model the read rule, then write the real grants</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">The script needs nothing but Python: no packages, no account, no data file. Save it as <code>b6.py</code> and run it with <code>python b6.py</code>. The outputs shown are what it printed in this build under Python 3.11. Remember what it is: a local model of the documented rule, so its answers are the rule's answers, not a workspace's.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 336" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flowchart of the rule as b6.py runs it. A read request, who and which table, passes through check 1, USE CATALOG on the catalog; check 2, USE SCHEMA on the schema or above; check 3, SELECT on the table or above. Each failed check adds its privilege name to a missing list. Then: anything missing? If nothing is missing, highlighted, can read. If the list is not empty, denied, missing followed by every name on the list, as in output 2, denied, missing USE CATALOG, USE SCHEMA, and output 5, denied, missing SELECT.">
+        <defs>
+          <filter id="b6dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="73" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="b6dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#E00F00" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="b6dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#1B3139" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .b6dH { font: 800 12px Inter, sans-serif; fill: #1B3139; }
+          .b6dL { font: 600 12px Inter, sans-serif; fill: #1B3139; }
+          .b6dR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .b6dX { font: 600 11px ui-monospace, Menlo, monospace; fill: #991B1B; }
+          .b6dS { font: 400 11px Inter, sans-serif; fill: #4D6169; }
+          .b6dB { font: 800 11px Inter, sans-serif; fill: #4D3200; }
+          .b6dN { font: 400 12px Inter, sans-serif; fill: #4D6169; }
+        </style>
+
+        <text class="b6dH" x="30" y="26">THE RULE AS b6.py RUNS IT</text>
+
+        <g filter="url(#b6dSk)" fill="none" stroke="#1B3139" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="842" cy="30" r="9"/>
+          <path d="M837 30 L841 34 L848 25"/>
+          <rect x="30" y="60" width="150" height="60" rx="8" transform="rotate(-1 105 90)" fill="#FFFFFF"/>
+          <rect x="200" y="60" width="150" height="60" rx="8" transform="rotate(1 275 90)" fill="#FFF5F3"/>
+          <rect x="370" y="60" width="150" height="60" rx="8" transform="rotate(-1 445 90)" fill="#FFF5F3"/>
+          <rect x="540" y="60" width="150" height="60" rx="8" transform="rotate(1 615 90)" fill="#FFF5F3"/>
+          <rect x="710" y="60" width="150" height="60" rx="8" transform="rotate(-1 785 90)" fill="#FFFFFF"/>
+          <path d="M184 90 L194 90" marker-end="url(#b6dAr)"/>
+          <path d="M354 90 L364 90" marker-end="url(#b6dAr)"/>
+          <path d="M524 90 L534 90" marker-end="url(#b6dAr)"/>
+          <path d="M694 90 L704 90" marker-end="url(#b6dAr)"/>
+          <path d="M275 124 L275 172" stroke="#991B1B" stroke-dasharray="4 4" marker-end="url(#b6dAr)"/>
+          <path d="M445 124 L445 172" stroke="#991B1B" stroke-dasharray="4 4" marker-end="url(#b6dAr)"/>
+          <path d="M615 124 L615 172" stroke="#991B1B" stroke-dasharray="4 4" marker-end="url(#b6dAr)"/>
+          <rect x="200" y="176" width="490" height="44" rx="6" transform="rotate(-0.4 445 198)" fill="url(#b6dHc)"/>
+          <path d="M785 124 L785 172" marker-end="url(#b6dAr)"/>
+          <rect x="710" y="176" width="150" height="44" rx="6" transform="rotate(1 785 198)" fill="#FFAB00" stroke="#4D3200"/>
+          <path d="M445 224 L445 250" marker-end="url(#b6dAr)"/>
+          <rect x="200" y="254" width="490" height="44" rx="6" transform="rotate(0.4 445 276)" fill="#FFFFFF" stroke="#991B1B"/>
+        </g>
+
+        <text class="b6dL" x="42" y="84">read request</text>
+        <text class="b6dS" x="42" y="102">who, which table</text>
+        <text class="b6dH" x="212" y="84">1 · USE CATALOG</text>
+        <text class="b6dS" x="212" y="102">on the catalog?</text>
+        <text class="b6dH" x="382" y="84">2 · USE SCHEMA</text>
+        <text class="b6dS" x="382" y="102">on schema or above?</text>
+        <text class="b6dH" x="552" y="84">3 · SELECT</text>
+        <text class="b6dS" x="552" y="102">on table or above?</text>
+        <text class="b6dH" x="722" y="84">anything missing?</text>
+        <text class="b6dS" x="722" y="102">read the list</text>
+
+        <text class="b6dS" x="283" y="152">no: add it</text>
+        <text class="b6dS" x="453" y="152">no: add it</text>
+        <text class="b6dS" x="623" y="152">no: add it</text>
+        <text class="b6dS" x="793" y="152">no</text>
+
+        <rect x="212" y="184" width="466" height="28" rx="4" fill="#FFFFFF"/>
+        <text class="b6dL" x="222" y="203">missing list: each failed check appends its privilege name</text>
+
+        <text class="b6dB" x="722" y="195">nothing missing</text>
+        <text class="b6dL" x="722" y="211">can read</text>
+
+        <text class="b6dS" x="453" y="242">list not empty</text>
+        <text class="b6dR" x="214" y="272">denied, missing &lt;every name on the list&gt;</text>
+        <text class="b6dX" x="214" y="289">output 2: USE CATALOG, USE SCHEMA · output 5: SELECT</text>
+
+        <text class="b6dN" x="30" y="324">The model checks all three and names every missing key, which is why output 1 lists three.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - nothing reaches the amber box until the missing list is empty</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Write the model.</strong> A grant is a tuple of principal, privilege and securable. <code>has</code> looks for the privilege on the securable or any parent, which is inheritance. <code>can_read</code> runs the three checks and collects whatever is missing. This part defines functions and prints nothing.</p>
+        <div class="prompt-box good"><span class="label">★ b6.py, part 1</span># Analyst session 6: the Unity Catalog read rule, as a local model you can run anywhere.
+# A MODEL of the rule in the Databricks privileges reference, not Unity Catalog itself:
+# to read a table you need USE CATALOG on its catalog, USE SCHEMA on its schema and SELECT on
+# the table; a privilege granted on a catalog or schema is inherited by everything inside it.
+
+GRANTS = set()          # (principal, privilege, securable)
+
+def grant(priv, securable, who):
+    GRANTS.add((who, priv, securable))
+    kind = {1: "CATALOG", 2: "SCHEMA", 3: "TABLE"}[securable.count(".") + 1]
+    print(f"GRANT {priv} ON {kind} {securable} TO `{who}`")
+
+def has(who, priv, securable):
+    parts = securable.split(".")
+    # the securable itself, or any parent of it, carries the privilege (inheritance flows down)
+    return any((who, priv, ".".join(parts[:i])) in GRANTS for i in range(1, len(parts) + 1))
+
+def can_read(who, table):
+    cat, sch, _ = table.split(".")
+    missing = [p for p, s in (("USE CATALOG", cat), ("USE SCHEMA", f"{cat}.{sch}"), ("SELECT", table))
+               if not has(who, p, s)]
+    return "can read" if not missing else "denied, missing " + ", ".join(missing)</div>
+      </div>
+      <div class="step">
+        <p><strong>Grant to the analysts group, one key at a time.</strong> Ask before any grant, after SELECT alone, and after the two doors. Watch the missing list shrink.</p>
+        <div class="prompt-box good"><span class="label">★ b6.py, part 2</span>T = "main.taxi.trips"
+print("1.", can_read("analysts", T))
+grant("SELECT", T, "analysts")
+print("2.", can_read("analysts", T))
+grant("USE CATALOG", "main", "analysts")
+grant("USE SCHEMA", "main.taxi", "analysts")
+print("3.", can_read("analysts", T))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, local model of the documented rule (Python 3.11)</span>1. denied, missing USE CATALOG, USE SCHEMA, SELECT
+GRANT SELECT ON TABLE main.taxi.trips TO `analysts`
+2. denied, missing USE CATALOG, USE SCHEMA
+GRANT USE CATALOG ON CATALOG main TO `analysts`
+GRANT USE SCHEMA ON SCHEMA main.taxi TO `analysts`
+3. can read</div>
+      </div>
+      <div class="step">
+        <p><strong>Grant at the schema level, then ask about a table nobody has built.</strong> Finance gets SELECT on <code>main.taxi</code>, so every table in it, now and later. The analysts group keeps its table-level SELECT on <code>trips</code>.</p>
+        <div class="prompt-box good"><span class="label">★ b6.py, part 3</span>grant("SELECT", "main.taxi", "finance")         # schema-level SELECT: every table, now and later
+grant("USE CATALOG", "main", "finance"); grant("USE SCHEMA", "main.taxi", "finance")
+print("4.", can_read("finance", "main.taxi.zones_created_next_year"))
+print("5.", can_read("analysts", "main.taxi.zones_created_next_year"))</div>
+        <div class="prompt-box good"><span class="label">Output · laptop path, local model of the documented rule (Python 3.11)</span>GRANT SELECT ON SCHEMA main.taxi TO `finance`
+GRANT USE CATALOG ON CATALOG main TO `finance`
+GRANT USE SCHEMA ON SCHEMA main.taxi TO `finance`
+4. can read
+5. denied, missing SELECT</div>
+      </div>
+      <div class="step">
+        <p><strong>Free Edition path (optional).</strong> Databricks Free Edition is free, non-commercial and serverless only, with one workspace and one metastore per account; re-check its limitations page before you plan around it, because limits change. In a SQL cell, write the same three keys for a group that exists in your account, on a table you own (the session 1 table works), and read them back. This build did not run these statements, so no output is shown. On a workspace where you are the only user you can write and inspect grants but cannot watch a second person be denied, which is exactly why the laptop model exists.</p>
+        <div class="prompt-box good"><span class="label">★ Free Edition, SQL cell (not run in this build)</span>-- replace every your_ placeholder with names from your own workspace
+GRANT USE CATALOG ON CATALOG your_catalog TO `your_group`;
+GRANT USE SCHEMA ON SCHEMA your_catalog.your_schema TO `your_group`;
+GRANT SELECT ON TABLE your_catalog.your_schema.trips_jan15 TO `your_group`;
+
+SHOW GRANTS ON SCHEMA your_catalog.your_schema;
+SHOW GRANTS ON TABLE your_catalog.your_schema.trips_jan15;</div>
+      </div>
+    </div>
+
+    <div class="prompt-box bad"><span class="label">✗ The grant that answers every ticket and creates the next one</span>GRANT ALL PRIVILEGES ON CATALOG main TO `analysts`;
+-- reaches every schema and table in main, current and future, including changing rows
+-- still excludes MANAGE, so nobody in the group can grant to a new hire
+-- and SHOW GRANTS will show one line that nobody can explain a year from now</div>
+
+    <div class="callout tip">
+      <p><strong>Three keys, to a group, then check.</strong> Grant USE CATALOG, USE SCHEMA and SELECT to a group rather than to people, at the lowest level that serves the request. Run SHOW GRANTS before and after every change, and REVOKE what inheritance gives that nobody asked for.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 7</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Predict, then run.</strong> Add a group <code>auditors</code> to <code>b6.py</code> with SELECT and USE CATALOG on the catalog <code>main</code> and nothing else. Write down what <code>can_read("auditors", T)</code> will print before you run it, then check.</li>
+      <li><strong>Write <code>revoke()</code>.</strong> Remove a tuple from <code>GRANTS</code> and print the matching <code>REVOKE ... FROM</code> line. Revoke USE SCHEMA from the analysts group and confirm request 3 now names exactly one missing key.</li>
+      <li><strong>Read your own grants.</strong> On Free Edition, run SHOW GRANTS on your schema before and after one GRANT, and write down which line appeared. Do not trust the statement you typed; trust the second SHOW GRANTS.</li>
+      <li><strong>Close one gap in the model.</strong> Pick one item from "What the model leaves out" (ownership is the easiest) and add it to <code>can_read</code>. Write one sentence on what real Unity Catalog does that your version still does not.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and analyst session 6 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · The analysts group holds SELECT on <code>main.taxi.trips</code> and nothing else. What happens when a member reads the table?</p>
+      <button class="qopt" type="button">A · They can read it: SELECT is the privilege that grants data</button>
+      <button class="qopt" type="button">B · Denied, missing USE CATALOG and USE SCHEMA</button>
+      <button class="qopt" type="button">C · Denied, missing SELECT, because it must be granted on the schema</button>
+      <button class="qopt" type="button">D · They can read it, but only the columns named in the grant</button>
+      <p class="qwhy">The read rule needs all three keys. SELECT on the table is the last lock; USE CATALOG on <code>main</code> and USE SCHEMA on <code>main.taxi</code> are the doors in front of it. That is output 2.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Finance holds SELECT on the schema <code>main.taxi</code> plus both doors. Next year an engineer creates <code>main.taxi.zones_created_next_year</code>. Can finance read it?</p>
+      <button class="qopt" type="button">A · No, not until someone grants SELECT on the new table</button>
+      <button class="qopt" type="button">B · Only if a member of finance created the table</button>
+      <button class="qopt" type="button">C · Only after the grants are refreshed with SHOW GRANTS</button>
+      <button class="qopt" type="button">D · Yes: privileges on a schema apply to all current and future objects in it</button>
+      <p class="qwhy">Inheritance includes the future. The SELECT check walks up from the table and finds the grant on <code>main.taxi</code>, which is output 4. Convenient for reporting schemas, and the reason to decide what lands in a schema before it lands.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · Which question can <code>b6.py</code> NOT answer for you?</p>
+      <button class="qopt" type="button">A · Which of the three keys a group is missing</button>
+      <button class="qopt" type="button">B · Whether a schema-level SELECT reaches a table created later</button>
+      <button class="qopt" type="button">C · Who can actually read <code>main.taxi.trips</code> in your workspace today, given owners, MANAGE, row filters, masks and bindings</button>
+      <button class="qopt" type="button">D · What GRANT statement text a grant corresponds to</button>
+      <p class="qwhy">It is a local model of one documented rule. It knows nothing about your workspace, ownership, MANAGE, row filters, column masks, workspace bindings or external locations. For the real answer, run SHOW GRANTS at each level.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">The read rule, inheritance to "all current and future objects", MANAGE, and what ALL PRIVILEGES excludes</span><span class="note">Databricks documentation, docs.databricks.com, "Unity Catalog privileges and securable objects", read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Model privileges: CREATE MODEL with USE SCHEMA to create, CREATE MODEL VERSION, EXECUTE to load</span><span class="note">Databricks documentation, docs.databricks.com, models in Unity Catalog, read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Free Edition: free, non-commercial, serverless only, one workspace and one metastore per account</span><span class="note">Databricks documentation, "Free Edition limitations", read 3 October 2026</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Every printed output in the build-along</span><span class="note">Run in this build with b6.py under Python 3.11; a local model of the documented rule, not Unity Catalog</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">The Free Edition SQL and the three team stories</span><span class="note">The SQL was not run in this build; the stories are constructed</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Analyst session 6 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The statement</b><span>GRANT priv ON CATALOG / SCHEMA / TABLE name TO `group`.</span></div>
+      <div class="cheat-item"><b>Three keys to read</b><span>USE CATALOG, USE SCHEMA, SELECT. SELECT alone opens nothing.</span></div>
+      <div class="cheat-item"><b>Inheritance includes the future</b><span>A catalog or schema grant reaches all current and future objects.</span></div>
+      <div class="cheat-item"><b>ALL PRIVILEGES is not all</b><span>It excludes MANAGE, READ METADATA, EXTERNAL USE SCHEMA, EXTERNAL USE LOCATION.</span></div>
+      <div class="cheat-item"><b>SHOW GRANTS is the truth</b><span>Run it before and after every change; REVOKE what nobody asked for.</span></div>
+      <div class="cheat-item"><b>Models need EXECUTE</b><span>CREATE MODEL plus USE SCHEMA to create; EXECUTE to load.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Tonight's tree had a model in it that nobody had built. Session 7 builds it: MLflow tracks two tip models on real taxi trips, the better one is registered with an alias, and on Databricks that model becomes a Unity Catalog object governed by these same grants, with EXECUTE deciding who may load it.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Analyst session 6 of 8 · learn-databricks-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="b5-data-skipping-and-clustering.html">← Prev: Data skipping, OPTIMIZE and clustering</a> &nbsp;·&nbsp; <a href="b7-mlflow-on-databricks.html">Next: MLflow on Databricks →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>
